@@ -126,10 +126,14 @@ def convert(snapshot):
         elif closed and area_kind(tags):
             scene['areas'].append([area_kind(tags), [points]])
         elif 'highway' in tags or tags.get('railway') == 'rail':
-            scene['roads'].append([
+            road = [
                 tags.get('highway', 'rail'), tags.get('bridge', 'no') != 'no',
                 tags.get('tunnel', 'no') != 'no', points,
-            ])
+            ]
+            count = tags.get('step_count', '')
+            if road[0] == 'steps' and count.isdecimal() and 1 <= int(count) <= 200:
+                road.append([int(count), tags.get('handrail') == 'yes'])
+            scene['roads'].append(road)
     for key in ('areas', 'buildings', 'roads'):
         if not scene[key]:
             raise ValueError(f'OSM snapshot contains no {key}')

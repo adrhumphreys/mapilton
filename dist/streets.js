@@ -132,3 +132,39 @@ export function streetFurniture(project, elevation, details) {
   });
   return objects;
 }
+
+export function paintSteps(ctx, routes, elevation) {
+  for (const { steps, flat, size } of routes) {
+    if (!steps) continue;
+    const [count, handrail] = steps;
+    const segments = [];
+    let length = 0;
+    for (let i = 1; i < flat.length; i++) {
+      const a = flat[i - 1], b = flat[i];
+      const run = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (!run) continue;
+      segments.push({ a, b, start: length, run });
+      length += run;
+    }
+    if (!length) continue;
+    let segment = 0;
+    let previousRail;
+    for (let i = 0; i <= count; i++) {
+      const distance = i / count * length;
+      while (segment < segments.length - 1 && distance > segments[segment + 1].start) segment++;
+      const { a, b, start, run } = segments[segment];
+      const [x, y] = mix(a, b, (distance - start) / run);
+      const dx = -(b[1] - a[1]) / run * size * 0.72;
+      const dy = (b[0] - a[0]) / run * size * 0.72;
+      const lift = elevation.lift(x, y);
+      const left = [x - dx, y - dy - lift], right = [x + dx, y + dy - lift];
+      line(ctx, left, right, i % 2 ? '#8d8979' : '#e5dbc2', 0.6);
+      if (handrail) {
+        const rail = [right[0], right[1] - 1.25];
+        if (previousRail) line(ctx, previousRail, rail, '#53675f', 0.65);
+        if (i % 4 === 0) line(ctx, right, rail, '#53675f', 0.65);
+        previousRail = rail;
+      }
+    }
+  }
+}

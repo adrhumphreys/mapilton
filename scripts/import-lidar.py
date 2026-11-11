@@ -91,7 +91,7 @@ def canopy_points(map_data, dem, dsm, transform):
     blocked = rasterize(polygons, out_shape=dem.shape, transform=transform,
                         all_touched=True, dtype='uint8')
     lines = [{'type': 'LineString', 'coordinates': coordinates(line)}
-             for kind, bridge, tunnel, line in map_data['roads']
+             for kind, bridge, tunnel, line, *_ in map_data['roads']
              if not tunnel and kind not in ('path', 'footway', 'cycleway', 'steps')]
     road_cells = rasterize(lines, out_shape=dem.shape, transform=transform, dtype='uint8')
     blocked |= maximum_filter(road_cells, size=5)

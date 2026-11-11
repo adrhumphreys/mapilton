@@ -1,5 +1,5 @@
 import { landmarkBuildings, paintLandmark } from './landmarks.js';
-import { paintCrossings, streetFurniture } from './streets.js';
+import { paintCrossings, paintSteps, streetFurniture } from './streets.js?stairs=1';
 
 // East/south metres are rotated onto an orthographic camera tilted 43° down.
 export const width = 3660;
@@ -29,6 +29,7 @@ export const places = [
   { name: 'St Peter’s Cathedral', lat: -37.792297, lon: 175.286398, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'The Anglican cathedral and its square bell tower stand on Pukerangiora above Victoria Street.' },
   { name: 'ArtsPost', lat: -37.789742, lon: 175.285732, viewScale: 3.25, hidePinAtCloseZoom: true, text: 'The former Hamilton Post and Telegraph Office at Victoria and Hood Streets houses ArtsPost.' },
   { name: 'Gardens Pavilion', lat: -37.806105, lon: 175.302491, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'The pavilion sits near Turtle Lake and the Hamilton Gardens entry precinct.' },
+  { name: 'Wintec City Campus', lat: -37.788682, lon: 175.27990, viewScale: 2.35, hidePinAtCloseZoom: true, text: 'Tainui Rise reaches about 51 m above sea level near the Gallagher Hub. Nearby Anglesea Street is about 40 m, based on LiDAR samples.' },
 ].map(place => ({
   ...place,
   x: (place.lon - 175.286) * 87900,
@@ -205,30 +206,6 @@ function paintLandmarks(ctx, layers) {
     ctx.fillStyle = '#fff2d5';
     ctx.fillRect(Math.round(x), Math.round(y), 2, 1);
   }
-}
-
-function paintRelief(ctx, terrain) {
-  const grid = document.createElement('canvas');
-  grid.width = terrain.width;
-  grid.height = terrain.height;
-  const pixels = grid.getContext('2d');
-  const image = pixels.createImageData(grid.width, grid.height);
-  const shade = atob(terrain.shade);
-  for (let i = 0; i < shade.length; i++) {
-    const relief = shade.charCodeAt(i) - 128;
-    const offset = i * 4;
-    image.data[offset] = relief > 0 ? 244 : 43;
-    image.data[offset + 1] = relief > 0 ? 228 : 72;
-    image.data[offset + 2] = relief > 0 ? 169 : 61;
-    image.data[offset + 3] = Math.abs(relief) * 1.35;
-  }
-  pixels.putImageData(image, 0, 0);
-  const [x, y] = project(terrain.x, terrain.y);
-  ctx.save();
-  ctx.transform(cos * terrain.step, -pitch * sin * terrain.step,
-    sin * terrain.step, pitch * cos * terrain.step, x, y);
-  ctx.drawImage(grid, -0.5, -0.5);
-  ctx.restore();
 }
 
 function paintBridgeStructure(ctx, route, style) {
@@ -492,7 +469,6 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
     return { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample: aerial?.roofs[key], landmark: landmarkBuildings[key] };
   });
 
-  paintRelief(ctx, lidar.terrain);
   if (aerial) ctx.drawImage(aerial.ground, 0, 0);
 
   const waterPaths = areaLayers.get('water') || [];
@@ -551,19 +527,21 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
   }
   paintLandmarks(ctx, areaLayers);
 
-  const routes = data.roads.flatMap(([kind, bridge, tunnel, line]) => {
+  const routes = data.roads.flatMap(([kind, bridge, tunnel, line, steps]) => {
     const size = roads[kind] || roads[kind.replace(/_link$/, '')];
     if (!size || tunnel) return [];
     const flat = line.map(p => project(...p));
     const points = elevation.route(flat, bridge);
-    return [{ kind, bridge, size, flat, points, shape: path(bridge ? points : flat) }];
+    return [{ kind, bridge, size, flat, points, steps, shape: path(bridge ? points : flat) }];
   }).sort((a, b) => Number(a.bridge) - Number(b.bridge) || a.size - b.size);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   for (const bridge of [false, true]) {
     if (bridge) {
       paintCrossings(ctx, project, routes, data.streetDetails ?? []);
+      elevation.paintShade(ctx);
       elevation.paintGround(ctx);
+      paintSteps(ctx, routes, elevation);
     }
     const pass = routes.filter(route => route.bridge === bridge);
     for (const route of pass) {

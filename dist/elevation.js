@@ -44,6 +44,32 @@ export function createElevation(grid) {
     return result;
   }
 
+  function paintShade(context) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const painter = canvas.getContext('2d');
+    const shade = painter.createImageData(width, height);
+    for (let y = 0; y < height; y++) {
+      const north = Math.max(0, y - 2), south = Math.min(height - 1, y + 2);
+      for (let x = 0; x < width; x++) {
+        const west = Math.max(0, x - 2), east = Math.min(width - 1, x + 2);
+        const across = (sample(east, y) - sample(west, y)) / ((east - west) * step * 0.73);
+        const depth = (sample(x, south) - sample(x, north)) * 0.68 / ((south - north) * step * 0.73);
+        // Light from the upper left, with weaker ambient light on steeper slopes.
+        const norm = Math.hypot(1, across, depth);
+        const light = (0.76 + 0.48 * across + 0.44 * depth) / norm - 0.76;
+        const offset = (y * width + x) * 4;
+        shade.data[offset] = light > 0 ? 249 : 43;
+        shade.data[offset + 1] = light > 0 ? 230 : 58;
+        shade.data[offset + 2] = light > 0 ? 174 : 49;
+        shade.data[offset + 3] = Math.min(light > 0 ? 57 : 125, Math.abs(light) * 205);
+      }
+    }
+    painter.putImageData(shade, 0, 0);
+    context.drawImage(canvas, left - step / 2, top - step / 2, width * step, height * step);
+  }
+
   function paintGround(context) {
     const w = right - left, h = bottom - top;
     const source = context.getImageData(left, top, w, h);
@@ -73,5 +99,5 @@ export function createElevation(grid) {
     context.putImageData(target, left, top);
   }
 
-  return { lift, point, route, paintGround };
+  return { lift, point, route, paintShade, paintGround };
 }
