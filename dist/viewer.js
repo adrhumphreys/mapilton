@@ -1,3 +1,4 @@
+import { createElevation } from './elevation.js';
 import { width, height, project, places, paintCity, paintMovement, paintBirds } from './city.js';
 
 const canvas = document.querySelector('#map');
@@ -17,17 +18,19 @@ async function loadJson(file) {
   return response.json();
 }
 
-let layers;
+let layers, elevation;
 try {
   const ground = new Image();
   ground.src = './hamilton-ground.webp';
-  const [map, lidar, aerial] = await Promise.all([
+  const [map, lidar, aerial, terrain] = await Promise.all([
     loadJson('hamilton.json'),
     loadJson('hamilton-lidar.json'),
     loadJson('hamilton-aerial.json'),
+    loadJson('hamilton-elevation.json'),
     ground.decode(),
   ]);
-  layers = paintCity(scene.getContext('2d'), map, lidar, { ground, roofs: aerial.roofs });
+  elevation = createElevation(terrain);
+  layers = paintCity(scene.getContext('2d'), map, lidar, { ground, roofs: aerial.roofs }, elevation);
   status.hidden = true;
 } catch (error) {
   status.textContent = 'The map could not load. Reload to try again.';
@@ -60,6 +63,8 @@ let selection = -1;
 let frame;
 const pointers = new Map();
 
+const position = place => layers.bridgeMarkers.get(place) ?? elevation.point(project(place.x, place.y));
+
 const markers = places.map((place, index) => {
   const button = document.createElement('button');
   button.className = 'marker';
@@ -67,7 +72,7 @@ const markers = places.map((place, index) => {
   button.addEventListener('click', () => choose(index));
   document.querySelector('#markers').append(button);
   select.add(new Option(place.name, index));
-  return { button, point: project(place.x, place.y) };
+  return { button, point: position(place) };
 });
 
 function resize() {
@@ -166,7 +171,7 @@ function choose(index) {
     scale = overviewScale;
   } else {
     const place = places[index];
-    [x, y] = project(place.x, place.y);
+    [x, y] = position(place);
     x += place.viewOffsetX ?? 0;
     scale = Math.min(4, Math.max(overviewScale * 2.5, place.viewScale ?? 1.65));
     const title = document.createElement('h2');
