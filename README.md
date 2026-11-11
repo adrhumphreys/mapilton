@@ -37,3 +37,7 @@ To regenerate the aerial assets, use the same Python environment as the LiDAR im
 From Victoria Bridge to Steele Park, the terrain uses samples from the 2023 LINZ bare-earth model. The bridge deck follows the grade between its mapped approaches, and the mapped river surface uses a shared elevation derived from the survey. Relief fades at the edges of the pilot area to meet the surrounding flat map.
 
 To regenerate the elevation grid, use the LiDAR importer environment and run `python scripts/import-elevation.py`.
+
+## Hamilton East landmarks and streets
+
+Made Hamilton and the Cathedral of the Blessed Virgin Mary have hand-modelled details on their mapped footprints. Their features are based on the [Made project record](https://www.edwardswhite.co.nz/projects/made), [Stark Property’s project description](https://www.starkproperty.co.nz/work/made-of-hamilton-east), and [PAUA Architects’ cathedral project](https://www.pauaarchitects.co.nz/individual-project-cathedral-of-the-blessed-virgin-mary). Feature dimensions are approximate. Selected bus stops, cycle stands, benches, signals and crossings use locations from the OpenStreetMap extract.

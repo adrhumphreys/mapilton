@@ -1,3 +1,5 @@
+import { eastBuildings, paintEastBuilding, paintEastCrossings, eastFurniture } from './hamilton-east.js';
+
 // East/south metres are rotated onto an orthographic camera tilted 43° down.
 export const width = 3660;
 export const height = 2360;
@@ -19,6 +21,8 @@ export const places = [
   { name: 'Victoria Bridge', lat: -37.7913018, lon: 175.2897767, bridge: 'arch', text: 'The 1910 steel deck arch links Hamilton Central and Hamilton East.' },
   { name: 'Claudelands Bridge', lat: -37.7844701, lon: 175.2830619, bridge: 'truss', text: 'The steel truss crosses the Waikato River beside the former railway bridge.' },
   { name: 'Steele Park', lat: -37.794124, lon: 175.294721, viewScale: 0.98, viewOffsetX: -204, text: 'An open sports field beside Grey Street in Hamilton East.' },
+  { name: 'Made Hamilton', lat: -37.792788, lon: 175.292541, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'The Grey Street market occupies the former Waikato Regional Council offices.' },
+  { name: 'St Mary’s Cathedral', lat: -37.790302, lon: 175.29312, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'The Cathedral of the Blessed Virgin Mary rises above a broad entrance stair on Grey Street.' },
 ].map(place => ({
   ...place,
   x: (place.lon - 175.286) * 87900,
@@ -246,7 +250,7 @@ function paintBridgeStructure(ctx, route, style) {
   }
 }
 
-function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured, random, roofSample, flatGround, lift) {
+function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured, random, roofSample, flatGround, lift, landmark) {
   const footprint = path(ground, true);
   const size = Math.abs(area(metres));
   const house = size < 430 && !['industrial', 'commercial', 'retail', 'apartments'].includes(type);
@@ -283,7 +287,7 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
       : house ? ['#e6d3af', '#aa9d8b'] : ['#c8ba9b', '#9f9988'];
     fill(ctx, [top[i], top[j], b, a], walls[sunny ? 0 : 1]);
     const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const windows = Math.floor(length / (house ? 5 : 4));
+    const windows = landmark === 'cathedral' ? 0 : Math.floor(length / (house ? 5 : 4));
     for (let level = 2; level < tall - 1; level += 2.8) {
       for (let k = 1; k <= windows; k++) {
         const [x, y] = midpoint(a, b, k / (windows + 1));
@@ -336,7 +340,7 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
       }
       ctx.restore();
     }
-    if (size > 170) {
+    if (size > 170 && !landmark) {
       for (let i = 0; i < Math.min(95, size / 16); i++) {
         const x = Math.round(cx + (detailRandom() - 0.5) * Math.sqrt(size) * 1.6);
         const y = Math.round(cy + (detailRandom() - 0.5) * Math.sqrt(size));
@@ -356,6 +360,7 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
     }
     ctx.restore();
   }
+  if (landmark) paintEastBuilding(ctx, landmark, ground, top);
 }
 
 function paintTree(ctx, x, y, height, radius, seed) {
@@ -466,7 +471,7 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
       ctx.fillStyle = lotRandom() < 0.5 ? '#d2a978' : '#b17d76';
       ctx.fillRect(Math.round(ex), Math.round(ey), 2, 1);
     }
-    return { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample: aerial?.roofs[key] };
+    return { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample: aerial?.roofs[key], landmark: eastBuildings[key] };
   });
 
   paintRelief(ctx, lidar.terrain);
@@ -538,7 +543,10 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   for (const bridge of [false, true]) {
-    if (bridge) elevation.paintGround(ctx);
+    if (bridge) {
+      paintEastCrossings(ctx, project, routes);
+      elevation.paintGround(ctx);
+    }
     const pass = routes.filter(route => route.bridge === bridge);
     for (const route of pass) {
       if (bridge) stroke(ctx, route.shape, '#33565775', route.size + 7);
@@ -591,14 +599,14 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
       bridgeMarkers.set(place, midpoint(crossing.points[0], crossing.points.at(-1), 0.5));
     }
   }
-  const objects = [];
+  const objects = eastFurniture(project, elevation).map(({ y, draw }) => ({ y, draw: () => draw(front) }));
   for (const building of buildings) {
-    const { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample } = building;
+    const { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample, landmark } = building;
     if (cx < -120 || cx > width + 120 || cy < -120 || cy > height + 120) continue;
     const base = ground.map(elevation.point);
     const lift = elevation.lift(cx, cy);
     objects.push({ y: Math.max(...base.map(p => p[1])), draw: () =>
-      paintBuilding(front, base, metres, type, taggedHeight, levels, measured, random, roofSample, ground, lift) });
+      paintBuilding(front, base, metres, type, taggedHeight, levels, measured, random, roofSample, ground, lift, landmark) });
   }
 
   const canopy = lidar.canopy ?? data.trees.map(([x, y]) => [x, y, 8, 4]);

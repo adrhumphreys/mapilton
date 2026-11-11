@@ -69,7 +69,10 @@ const markers = places.map((place, index) => {
   const button = document.createElement('button');
   button.className = 'marker';
   button.textContent = place.name;
-  button.addEventListener('click', () => choose(index));
+  button.addEventListener('click', () => {
+    choose(index);
+    if (place.hidePinAtCloseZoom) canvas.focus({ preventScroll: true });
+  });
   document.querySelector('#markers').append(button);
   select.add(new Option(place.name, index));
   return { button, point: position(place) };
@@ -125,7 +128,8 @@ function draw(time) {
     button.style.left = px + 'px';
     button.style.top = py + 'px';
     button.hidden = px < 55 || px > viewportWidth - 55 || py < 116 || py > viewportHeight - 25
-      || (viewportWidth < 480 && selection === -1 && (index === 1 || index === 2));
+      || (viewportWidth < 480 && selection === -1 && (index === 1 || index === 2))
+      || (index === selection && places[index].hidePinAtCloseZoom && scale >= 2 && !button.matches(':focus'));
     button.setAttribute('aria-pressed', String(index === selection));
   }
 
