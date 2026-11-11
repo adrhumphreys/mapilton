@@ -45,8 +45,8 @@ footer { bottom: 22px; left: 22px; padding: 4px 8px; display: flex; gap: 14px; f
   position: absolute;
   inset: 0;
   pointer-events: none;
-  backdrop-filter: blur(2.3px);
-  mask-image: linear-gradient(#000 0%, transparent 23%, transparent 77%, #000 100%);
+  backdrop-filter: blur(1.8px);
+  mask-image: linear-gradient(#000 0%, transparent 19%, transparent 81%, #000 100%);
 }
 #atlas::before {
   content: "";

@@ -16,7 +16,7 @@ Open [localhost:8000](http://127.0.0.1:8000). Drag to pan, scroll or pinch to zo
 
 The bundled [OpenStreetMap](https://www.openstreetmap.org/copyright) extract was collected on 11 November 2026 and is available under the Open Database License (ODbL). It contains mapped roads, bridge alignments, building footprints, water, trees, and green spaces for central Hamilton. The browser loads the extract locally.
 
-`dist/city.js` projects the geometry through a single orthographic camera and draws roofs, façades, shadows, canopies, roads, and shorelines. Building heights use mapped height or floor-count tags when available. Untagged heights, roof forms, materials, and some vegetation are illustrative. Traffic follows mapped road segments, with a separate foreground canvas for occlusion. Terrain is flat, and the artwork is rendered procedurally.
+`dist/city.js` projects the geometry through a single orthographic camera and draws roofs, façades, shadows, canopies, roads, and shorelines. Building heights use mapped height or floor-count tags when available. Untagged heights, roof forms, materials, and some vegetation are illustrative. Close-up details such as parking bays, shopfronts, and flower beds are decorative interpretations of the mapped locations. Traffic follows mapped road segments, with a separate foreground canvas for occlusion. Terrain is flat, and the artwork is rendered procedurally.
 
 `dist/viewer.js` handles the camera, inputs, landmark navigation, minimap, and reduced-motion support.
 

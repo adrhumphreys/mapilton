@@ -79,6 +79,110 @@ function centre(points) {
   return points.reduce(([x, y], p) => [x + p[0] / points.length, y + p[1] / points.length], [0, 0]);
 }
 
+function groundRect(ctx, x, y, w, d, colour) {
+  fill(ctx, [[x, y], [x + w, y], [x + w, y + d], [x, y + d]]
+    .map(point => project(...point)), colour);
+}
+
+function longestEdge(points) {
+  return points.reduce(([a, b], point, i) => {
+    const next = points[(i + 1) % points.length];
+    return Math.hypot(point[0] - next[0], point[1] - next[1]) > Math.hypot(a[0] - b[0], a[1] - b[1])
+      ? [point, next] : [a, b];
+  }, [points[0], points[1]]);
+}
+
+function paintParking(ctx, shape, ring) {
+  const points = ring.slice(0, -1).map(point => project(...point));
+  const size = Math.abs(area(points));
+  if (size < 240 || size > 18000) return;
+  const [cx, cy] = centre(points);
+  const [[ax, ay], [bx, by]] = longestEdge(points);
+  const heading = Math.atan2(by - ay, bx - ax);
+  const span = Math.min(160, Math.sqrt(size) * 2);
+  const random = randomSource(Math.round(cx * 17 + cy * 137));
+  ctx.save();
+  ctx.clip(shape, 'evenodd');
+  ctx.translate(cx, cy);
+  ctx.rotate(heading);
+  for (let row = -Math.ceil(span / 14) * 14; row < span; row += 14) {
+    for (let col = -span; col < span; col += 3.8) {
+      ctx.fillStyle = '#ece2cc9c';
+      ctx.fillRect(col, row, 0.55, 4.7);
+      if (random() > 0.21) continue;
+      ctx.fillStyle = '#4e5c6165';
+      ctx.fillRect(col + 1.1, row + 0.8, 2.2, 4.1);
+      ctx.fillStyle = ['#e6ddd0', '#667d8d', '#b86b58', '#495e63'][Math.floor(random() * 4)];
+      ctx.fillRect(col + 0.8, row + 0.3, 2.1, 3.8);
+      ctx.fillStyle = '#b1c3c5';
+      ctx.fillRect(col + 1, row + 1, 1.6, 0.65);
+    }
+  }
+  ctx.restore();
+}
+
+function paintLandmarks(ctx, layers) {
+  const [lake, seddon, square, , gardens] = places;
+  // Find the inner oval from the mapped playing surface.
+  const cricket = layers.get('pitch').find(({ rings }) => {
+    const [x, y] = centre(rings[0]);
+    const size = Math.abs(area(rings[0]));
+    return Math.hypot(x - seddon.x, y - seddon.y) < 58 && size > 8500 && size < 18000;
+  });
+  if (cricket) {
+    const ring = cricket.rings[0];
+    const [x, y] = centre(ring);
+    const boundary = ring.map(([px, py]) => project(x + (px - x) * 0.96, y + (py - y) * 0.96));
+    stroke(ctx, path(boundary, true), '#e8e4b6', 1.2);
+    groundRect(ctx, x - 4, y - 12, 8, 24, '#9b9b5c');
+    groundRect(ctx, x - 2, y - 10, 4, 20, '#d3b580');
+    for (const line of [y - 8, y + 7]) groundRect(ctx, x - 2, line, 4, 1, '#fcf0cc');
+  }
+
+  for (const { shape, rings } of layers.get('plaza') || []) {
+    const [x, y] = centre(rings[0]);
+    if (Math.min(Math.hypot(x - square.x, y - square.y),
+      Math.hypot(x - gardens.x, y - gardens.y)) > 95) continue;
+    const [px, py] = project(x, y);
+    ctx.save();
+    ctx.clip(shape, 'evenodd');
+    ctx.translate(px, py);
+    ctx.rotate(-0.24);
+    ctx.fillStyle = '#8f806d43';
+    for (let offset = -90; offset <= 90; offset += 4) {
+      ctx.fillRect(offset, -90, 0.65, 180);
+      ctx.fillRect(-90, offset, 180, 0.65);
+    }
+    ctx.restore();
+  }
+
+  // These flower patterns are ornamental details inside mapped planting areas.
+  for (const { shape, rings } of layers.get('grass') || []) {
+    const [x, y] = centre(rings[0]);
+    const size = Math.abs(area(rings[0]));
+    if (Math.hypot(x - gardens.x, y - gardens.y) > 95 || size < 80 || size > 1500) continue;
+    const colour = ['#e39c72', '#d88791', '#f1c37b'];
+    ctx.save();
+    ctx.clip(shape, 'evenodd');
+    for (let row = -18; row <= 18; row += 5) {
+      for (let col = -20; col <= 20; col += 4) {
+        groundRect(ctx, x + col, y + row, 2.5, 2.6, '#587648');
+        groundRect(ctx, x + col, y + row, 1.3, 1.3, colour[(row + col + 42) % colour.length]);
+      }
+    }
+    ctx.restore();
+  }
+
+  // A few birds on the open lake give a sense of scale at close zoom.
+  for (const [dx, dy] of [[17, 5], [21, 8], [24, 6], [-41, 29], [-45, 34]]) {
+    const [x, y] = project(lake.x + dx, lake.y + dy);
+    ctx.fillStyle = '#285f66';
+    ctx.fillRect(Math.round(x), Math.round(y + 1), 5, 1);
+    ctx.fillStyle = '#fff2d5';
+    ctx.fillRect(Math.round(x), Math.round(y), 2, 1);
+  }
+}
+
 function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, random) {
   const footprint = path(ground, true);
   const size = Math.abs(area(metres));
@@ -86,6 +190,8 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, random) 
   const tall = Math.max(2.4, Math.min(85, parseFloat(taggedHeight)
     || parseFloat(levels) * 3.3 || (house ? 3.5 + random() * 2.5 : 5 + random() * 7))) * 0.73;
   const [roof, light, dark, trim] = palettes[Math.floor(random() * palettes.length)];
+  const detailRandom = randomSource(Math.round(ground[0][0] * 433 + ground[0][1] * 313));
+  const shopfront = !house && size < 2400 && tall < 19;
   const top = ground.map(([x, y]) => [x, y - tall]);
   const front = area(ground) > 0 ? 1 : -1;
 
@@ -103,12 +209,20 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, random) 
     fill(ctx, [top[i], top[j], b, a], walls[sunny ? 0 : 1]);
     const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
     const windows = Math.floor(length / (house ? 5 : 4));
-    ctx.fillStyle = sunny ? '#61716d' : '#4f6365';
     for (let level = 2; level < tall - 1; level += 2.8) {
       for (let k = 1; k <= windows; k++) {
         const [x, y] = midpoint(a, b, k / (windows + 1));
-        ctx.fillRect(Math.round(x), Math.round(y - level), 1.4, 1.2);
+        ctx.fillStyle = detailRandom() > 0.89 ? '#d8bb7c' : sunny ? '#526a68' : '#415c61';
+        ctx.fillRect(Math.round(x), Math.round(y - level), house ? 1.7 : 1.9, 1.35);
+        ctx.fillStyle = '#f7dfb771';
+        ctx.fillRect(Math.round(x), Math.round(y - level) + 1, 2, 0.65);
       }
+    }
+    if (shopfront && length > 11) {
+      const from = midpoint(a, b, 0.12), to = midpoint(a, b, 0.86);
+      const fascia = [from, to].map(([x, y]) => [x, y - 2.6]);
+      stroke(ctx, path(fascia), '#4c6563', 1.7);
+      stroke(ctx, path(fascia.map(([x, y]) => [x - 1, y - 1.3])), light, 1.5);
     }
   }
 
@@ -125,6 +239,10 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, random) 
     fill(ctx, [b, c, r2, r1], dark);
     fill(ctx, [a, b, r1], roof);
     fill(ctx, [c, d, r2], roof);
+    for (const t of [0.28, 0.54, 0.79]) {
+      stroke(ctx, path([midpoint(a, r1, t), midpoint(d, r2, t)]), '#f7e6bd45', 0.6);
+      stroke(ctx, path([midpoint(b, r1, t), midpoint(c, r2, t)]), '#393b3840', 0.65);
+    }
     stroke(ctx, path([r1, r2]), trim, 0.8);
   } else {
     ctx.save();
@@ -133,11 +251,7 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, random) 
     const [cx, cy] = centre(top);
     if (size > 250) {
       const span = Math.min(180, Math.sqrt(size) * 1.8);
-      const edge = top.reduce(([a, b], point, i) => {
-        const next = top[(i + 1) % top.length];
-        return Math.hypot(point[0] - next[0], point[1] - next[1]) > Math.hypot(a[0] - b[0], a[1] - b[1])
-          ? [point, next] : [a, b];
-      }, [top[0], top[1]]);
+      const edge = longestEdge(top);
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(Math.atan2(edge[1][1] - edge[0][1], edge[1][0] - edge[0][0]));
@@ -148,6 +262,12 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, random) 
       ctx.restore();
     }
     if (size > 170) {
+      for (let i = 0; i < Math.min(95, size / 16); i++) {
+        const x = Math.round(cx + (detailRandom() - 0.5) * Math.sqrt(size) * 1.6);
+        const y = Math.round(cy + (detailRandom() - 0.5) * Math.sqrt(size));
+        ctx.fillStyle = i % 2 ? '#fff4cd26' : '#34443c2b';
+        ctx.fillRect(x, y, 1 + i % 3, 1);
+      }
       ctx.fillStyle = dark;
       ctx.fillRect(Math.round(cx - 3), Math.round(cy - 1), 8, 4);
       ctx.fillStyle = trim;
@@ -185,6 +305,10 @@ function paintTree(ctx, x, y, radius, variant) {
   ctx.fillStyle = greens[3];
   ctx.fillRect(x-r*.57, y-r*.77, r*.55, r*.25);
   ctx.fillRect(x-r*.7, y-r*.34, r*.34, r*.22);
+  for (const [dx, dy] of [[-0.48, -0.56], [-0.1, -0.68], [0.28, -0.34], [-0.58, 0.1]]) {
+    ctx.fillStyle = greens[2 + (Math.round(x + y + dx * 10) & 1)];
+    ctx.fillRect(Math.round(x + r * dx), Math.round(y + r * dy), Math.max(1, Math.round(r * 0.28)), 1);
+  }
 }
 
 function makeLayer() {
@@ -211,6 +335,7 @@ export function paintCity(ctx, data) {
       ctx.fillStyle = colour;
       ctx.fill(shape, 'evenodd');
       stroke(ctx, shape, '#dddcaa72', 1.3);
+      if (kind === 'parking') paintParking(ctx, shape, rings[0]);
       if (kind === 'pitch') {
         const points = rings[0].map(p => project(...p));
         const [cx, cy] = centre(points);
@@ -248,7 +373,11 @@ export function paintCity(ctx, data) {
   const waterPaths = areaLayers.get('water') || [];
   for (const { shape } of waterPaths) {
     stroke(ctx, shape, '#78956c', 6);
-    ctx.fillStyle = '#3e8186';
+    const colour = ctx.createLinearGradient(0, 0, width, height);
+    colour.addColorStop(0, '#407f85');
+    colour.addColorStop(0.48, '#327780');
+    colour.addColorStop(1, '#4c9394');
+    ctx.fillStyle = colour;
     ctx.fill(shape, 'evenodd');
     ctx.save();
     ctx.clip(shape, 'evenodd');
@@ -275,6 +404,8 @@ export function paintCity(ctx, data) {
     }
   }
 
+  paintLandmarks(ctx, areaLayers);
+
   const routes = data.roads.flatMap(([kind, bridge, tunnel, line]) => {
     const size = roads[kind] || roads[kind.replace(/_link$/, '')];
     if (!size || tunnel) return [];
@@ -290,12 +421,33 @@ export function paintCity(ctx, data) {
       stroke(ctx, route.shape, bridge ? '#d7caba' : '#ded3b5', route.size + 2.5);
     }
     for (const { kind, shape, size } of pass) {
-      const surface = kind === 'rail' ? '#6d625c' : size < 3 ? '#c9ba94' : '#818989';
+      const surface = kind === 'rail' ? '#6d625c' : size < 3 ? '#cfbd92' : '#727e80';
       stroke(ctx, shape, surface, size);
       if (size >= 8 || kind === 'rail') {
         ctx.setLineDash(kind === 'rail' ? [1, 3] : [5, 6]);
         stroke(ctx, shape, kind === 'rail' ? '#b7a892' : '#e1d5a7', kind === 'rail' ? 4.8 : 0.85);
         ctx.setLineDash([]);
+      }
+    }
+  }
+
+  // The bridge deck edges catch the light and posts give the spans a readable rhythm.
+  for (const { bridge, size, points } of routes) {
+    if (!bridge || size < 6) continue;
+    for (let i = 1; i < points.length; i++) {
+      const a = points[i - 1], b = points[i];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const length = Math.hypot(dx, dy);
+      if (length < 2) continue;
+      for (const side of [-1, 1]) {
+        const offset = side * (size / 2 + 0.4) / length;
+        const rail = [[a[0] - dy * offset, a[1] + dx * offset], [b[0] - dy * offset, b[1] + dx * offset]];
+        stroke(ctx, path(rail), side === 1 ? '#4c6364' : '#e0ceb0', 1);
+        for (let d = 3; d < length; d += 5) {
+          const [x, y] = midpoint(...rail, d / length);
+          ctx.fillStyle = '#efddbd';
+          ctx.fillRect(Math.round(x), Math.round(y - 1), 1, 2);
+        }
       }
     }
   }
