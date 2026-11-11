@@ -1,5 +1,5 @@
-import { createElevation } from './elevation.js';
-import { width, height, project, places, paintCity, paintMovement, paintBirds } from './city.js';
+import { createElevation } from './elevation.js?extent=3';
+import { width, height, mapScale, project, places, paintCity, paintMovement, paintBirds } from './city.js?activity=1';
 
 const canvas = document.querySelector('#map');
 const context = canvas.getContext('2d');
@@ -13,7 +13,7 @@ scene.width = width;
 scene.height = height;
 const status = document.querySelector('#loading');
 async function loadJson(file) {
-  const response = await fetch(file);
+  const response = await fetch(`${file}?extent=3`);
   if (!response.ok) throw new Error(`${file} returned HTTP ${response.status}`);
   return response.json();
 }
@@ -21,7 +21,7 @@ async function loadJson(file) {
 let layers, elevation;
 try {
   const ground = new Image();
-  ground.src = './hamilton-ground.webp';
+  ground.src = './hamilton-ground.webp?extent=3';
   const [map, lidar, aerial, terrain] = await Promise.all([
     loadJson('hamilton.json'),
     loadJson('hamilton-lidar.json'),
@@ -29,7 +29,7 @@ try {
     loadJson('hamilton-elevation.json'),
     ground.decode(),
   ]);
-  elevation = createElevation(terrain);
+  elevation = createElevation(terrain, mapScale);
   layers = paintCity(scene.getContext('2d'), map, lidar, { ground, roofs: aerial.roofs }, elevation);
   status.hidden = true;
 } catch (error) {
@@ -46,24 +46,31 @@ miniBase.width = mini.width;
 miniBase.height = mini.height;
 const miniPaint = miniBase.getContext('2d');
 const miniScale = Math.min(mini.width / width, mini.height / height);
-const miniInset = (mini.width - width * miniScale) / 2;
+const miniInsetX = (mini.width - width * miniScale) / 2;
+const miniInsetY = (mini.height - height * miniScale) / 2;
 composed.drawImage(scene, 0, 0);
 paintMovement(composed, layers, 0, mapBounds);
 composed.drawImage(layers.foreground, 0, 0);
 paintBirds(composed, layers.birds, 0, mapBounds);
 miniPaint.fillStyle = '#1c3331';
 miniPaint.fillRect(0, 0, mini.width, mini.height);
-miniPaint.drawImage(composite, miniInset, 0, width * miniScale, height * miniScale);
+miniPaint.drawImage(composite, miniInsetX, miniInsetY, width * miniScale, height * miniScale);
 let lastFrame = 0;
 
-let viewportWidth, viewportHeight, ratio, overviewScale;
-const startX = width * 0.34;
+let viewportWidth, viewportHeight, ratio, minimumScale;
+const startX = width / 2;
 let x = startX, y = height / 2, scale;
 let selection = -1;
 let frame;
 const pointers = new Map();
 
 const position = place => layers.bridgeMarkers.get(place) ?? elevation.point(project(place.x, place.y));
+const overviewLandmarks = new Set([
+  'The Base · Te Rapa', 'University of Waikato', 'Hamilton Gardens',
+  'Lake Rotoroa', 'Garden Place', 'FMG Stadium Waikato',
+]);
+const mapOverlays = [...document.querySelectorAll('header, .places, #detail, .tools, footer')];
+let previousLabelView = '';
 
 const markers = places.map((place, index) => {
   const button = document.createElement('button');
@@ -71,12 +78,52 @@ const markers = places.map((place, index) => {
   button.textContent = place.name;
   button.addEventListener('click', () => {
     choose(index);
-    if (place.hidePinAtCloseZoom) canvas.focus({ preventScroll: true });
+    if (place.hidePinAtCloseZoom || place.hideSelectedPin) canvas.focus({ preventScroll: true });
   });
   document.querySelector('#markers').append(button);
   select.add(new Option(place.name, index));
-  return { button, point: position(place) };
+  return { button, point: position(place), place, index, overview: overviewLandmarks.has(place.name) };
 });
+
+function measureLabels() {
+  const hidden = markers.map(({ button }) => button.hidden);
+  for (const { button } of markers) button.hidden = false;
+  for (const marker of markers) {
+    marker.width = marker.button.offsetWidth;
+    marker.height = marker.button.offsetHeight;
+  }
+  markers.forEach(({ button }, index) => { button.hidden = hidden[index]; });
+  previousLabelView = '';
+}
+
+function layoutLabels() {
+  const view = [x, y, scale, selection].join(',');
+  if (view === previousLabelView) return;
+  previousLabelView = view;
+  const map = canvas.getBoundingClientRect();
+  const occupied = mapOverlays.filter(element => !element.hidden).map(element => {
+    const box = element.getBoundingClientRect();
+    return [box.left - map.left, box.top - map.top, box.right - map.left, box.bottom - map.top];
+  });
+  const wide = scale < Math.max(0.28, minimumScale * 1.18);
+  const priority = marker => marker.index === selection ? 0 : marker.overview ? 1 : 2;
+  for (const marker of [...markers].sort((a, b) => priority(a) - priority(b))) {
+    const { button, point, place, index, overview, width, height } = marker;
+    const selected = index === selection;
+    const px = (point[0] - x) * scale + viewportWidth / 2;
+    const py = (point[1] - y) * scale + viewportHeight / 2;
+    const left = px - width / 2, right = px + width / 2, top = py - height, bottom = py + 4;
+    button.hidden = left < 8 || right > viewportWidth - 8 || top < 8 || bottom > viewportHeight - 8
+      || (!selected && ((wide && !overview) || (place.hidePinAtCloseZoom && scale < 0.7)))
+      || (selected && (place.hidePinAtCloseZoom || place.hideSelectedPin) && scale >= 2 && !button.matches(':focus'))
+      || occupied.some(([l, t, r, b]) => left < r + 7 && right > l - 7 && top < b + 5 && bottom > t - 5);
+    button.setAttribute('aria-pressed', String(selected));
+    if (button.hidden) continue;
+    button.style.left = px + 'px';
+    button.style.top = py + 'px';
+    occupied.push([left, top, right, bottom]);
+  }
+}
 
 function resize() {
   viewportWidth = canvas.clientWidth;
@@ -84,10 +131,11 @@ function resize() {
   ratio = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = Math.round(viewportWidth * ratio);
   canvas.height = Math.round(viewportHeight * ratio);
-  const previous = overviewScale;
-  overviewScale = Math.max(viewportWidth / width, viewportHeight / height);
-  scale = previous ? Math.min(4, scale * overviewScale / previous) : overviewScale;
+  const previous = minimumScale;
+  minimumScale = Math.max(viewportWidth / width, viewportHeight / height);
+  scale = previous ? clampScale(scale * minimumScale / previous) : minimumScale;
   constrain();
+  measureLabels();
   requestDraw();
 }
 
@@ -99,7 +147,7 @@ function requestDraw() {
 function draw(time) {
   frame = undefined;
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.fillStyle = '#a8b37b';
+  context.fillStyle = '#223934';
   context.fillRect(0, 0, viewportWidth, viewportHeight);
   context.translate(viewportWidth / 2 - x * scale, viewportHeight / 2 - y * scale);
   context.scale(scale, scale);
@@ -122,22 +170,12 @@ function draw(time) {
     context.drawImage(composite, ...region, ...region);
   }
 
-  for (const [index, { button, point }] of markers.entries()) {
-    const px = (point[0] - x) * scale + viewportWidth / 2;
-    const py = (point[1] - y) * scale + viewportHeight / 2;
-    button.style.left = px + 'px';
-    button.style.top = py + 'px';
-    button.hidden = px < 55 || px > viewportWidth - 55 || py < 116 || py > viewportHeight - 25
-      || (viewportWidth < 480 && selection === -1 && (index === 1 || index === 2))
-      || (places[index].hidePinAtCloseZoom && index !== selection && scale < 0.7)
-      || (index === selection && places[index].hidePinAtCloseZoom && scale >= 2 && !button.matches(':focus'));
-    button.setAttribute('aria-pressed', String(index === selection));
-  }
+  layoutLabels();
 
   miniContext.drawImage(miniBase, 0, 0);
   miniContext.strokeStyle = '#fff2bf';
   miniContext.lineWidth = 1.5;
-  miniContext.strokeRect(miniInset + left * miniScale + 1, top * miniScale + 1,
+  miniContext.strokeRect(miniInsetX + left * miniScale + 1, miniInsetY + top * miniScale + 1,
     Math.max(0, (right - left) * miniScale - 2), Math.max(0, (bottom - top) * miniScale - 2));
   if (animate) {
     lastFrame = time;
@@ -157,8 +195,12 @@ function constrain() {
   y = Math.max(marginY, Math.min(height - marginY, y));
 }
 
+function clampScale(value) {
+  return Math.max(minimumScale, Math.min(4, value));
+}
+
 function zoom(factor, px = viewportWidth / 2, py = viewportHeight / 2) {
-  const next = Math.max(overviewScale, Math.min(4, scale * factor));
+  const next = clampScale(scale * factor);
   x += (px - viewportWidth / 2) * (1 / scale - 1 / next);
   y += (py - viewportHeight / 2) * (1 / scale - 1 / next);
   scale = next;
@@ -173,12 +215,12 @@ function choose(index) {
   if (index === -1) {
     x = startX;
     y = height / 2;
-    scale = overviewScale;
+    scale = minimumScale;
   } else {
     const place = places[index];
     [x, y] = position(place);
     x += place.viewOffsetX ?? 0;
-    scale = Math.min(4, Math.max(overviewScale * 2.5, place.viewScale ?? 1.65));
+    scale = clampScale(Math.max(minimumScale * 2.5, place.viewScale ?? 1.65));
     const title = document.createElement('h2');
     const description = document.createElement('p');
     title.textContent = place.name;

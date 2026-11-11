@@ -1,22 +1,25 @@
-import { landmarkBuildings, paintLandmark } from './landmarks.js';
-import { paintCrossings, paintSteps, streetFurniture } from './streets.js?stairs=1';
+import { landmarkBuildings, paintLandmark } from './landmarks.js?te-awa=1';
+import { paintCrossings, paintSteps, streetFurniture } from './streets.js?extent=3';
+import { paintTeAwaEntrance, paintTeAwaParking, paintTeAwaRoof, teAwaVisitors } from './te-awa.js?public-space=1';
+import { gatheringSpots, paintPedestrianAreas } from './pedestrian-areas.js?activity=1';
 
 // East/south metres are rotated onto an orthographic camera tilted 43° down.
-export const width = 3660;
-export const height = 2360;
+export const width = 5900;
+export const height = 2800;
+export const mapScale = 0.58;
 const angle = Math.PI / 9;
 const cos = Math.cos(angle);
 const sin = Math.sin(angle);
 const pitch = 0.68;
 export const project = (x, y, z = 0) => [
-  width / 2 - 540 + cos * x + sin * y,
-  height / 2 - 75 + pitch * (cos * y - sin * x) - z * 0.73,
+  3880 + mapScale * (cos * x + sin * y),
+  1790 + mapScale * (pitch * (cos * y - sin * x) - z * 0.73),
 ];
 
 export const places = [
   { name: 'Lake Rotoroa', lat: -37.798467, lon: 175.274928, viewScale: 1.02, viewOffsetX: 78, text: 'The Lake Domain curves around the shores of Hamilton Lake.' },
   { name: 'Seddon Park', lat: -37.786877, lon: 175.274529, viewScale: 1.95, text: 'Hamilton’s cricket oval sits between Frankton and the central city.' },
-  { name: 'Garden Place', lat: -37.787605, lon: 175.282219, text: 'A pedestrian square linking the city centre to Victoria Street and the river.' },
+  { name: 'Garden Place', lat: -37.787605, lon: 175.282219, viewScale: 2.2, hideSelectedPin: true, text: 'A pedestrian square linking the city centre to Victoria Street and the river.' },
   { name: 'Claudelands', lat: -37.77951, lon: 175.289567, viewScale: 2.35, hidePinAtCloseZoom: true, text: 'The arena and exhibition halls sit beside Jubilee Bush. The arena’s layered façade takes its cues from the forest canopy.' },
   { name: 'Hamilton Gardens', lat: -37.805214, lon: 175.302265, text: 'Enclosed gardens and open parkland beside a bend in the Waikato River.' },
   { name: 'Victoria Bridge', lat: -37.7913018, lon: 175.2897767, bridge: 'arch', text: 'The 1910 steel deck arch links Hamilton Central and Hamilton East.' },
@@ -30,6 +33,9 @@ export const places = [
   { name: 'ArtsPost', lat: -37.789742, lon: 175.285732, viewScale: 3.25, hidePinAtCloseZoom: true, text: 'The former Hamilton Post and Telegraph Office at Victoria and Hood Streets houses ArtsPost.' },
   { name: 'Gardens Pavilion', lat: -37.806105, lon: 175.302491, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'The pavilion sits near Turtle Lake and the Hamilton Gardens entry precinct.' },
   { name: 'Wintec City Campus', lat: -37.788682, lon: 175.27990, viewScale: 2.35, hidePinAtCloseZoom: true, text: 'Tainui Rise reaches about 51 m above sea level near the Gallagher Hub. Nearby Anglesea Street is about 40 m, based on LiDAR samples.' },
+  { name: 'FMG Stadium Waikato', lat: -37.781071, lon: 175.268416, viewScale: 1.65, text: 'The stadium sits between Mill Street and Seddon Road.' },
+  { name: 'University of Waikato', lat: -37.786528, lon: 175.319365, viewScale: 1.45, viewOffsetX: -72, text: 'The Hillcrest campus extends east from Knighton Road, with The Pā and Te Manawa at its heart.' },
+  { name: 'The Base · Te Rapa', lat: -37.748701, lon: 175.233218, viewScale: 2.15, hideSelectedPin: true, text: 'Te Awa’s translucent roof follows the mall’s internal street beside Maahanga Drive.' },
 ].map(place => ({
   ...place,
   x: (place.lon - 175.286) * 87900,
@@ -183,8 +189,8 @@ function paintBridgeStructure(ctx, route, style) {
   const a = route.points[0], b = route.points.at(-1);
   const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
   if (length < 45) return;
-  const sideX = -(b[1] - a[1]) / length * route.size * 0.5;
-  const sideY = (b[0] - a[0]) / length * route.size * 0.5;
+  const sideX = -(b[1] - a[1]) / length * route.width * 0.5;
+  const sideY = (b[0] - a[0]) / length * route.width * 0.5;
   function point(t, side, raise = 0) {
     const [x, y] = midpoint(a, b, t);
     return [x + sideX * side, y + sideY * side - raise];
@@ -224,7 +230,7 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
   const pitched = house && !courtyards.length && ground.length === 4 && size > 48 && (!measured || measured[1] >= 0.9);
   const measuredHeight = measured && (pitched ? measured[0] : measured[0] + measured[1] * 0.5);
   const tall = Math.max(1.8, Math.min(95, measuredHeight || parseFloat(taggedHeight)
-    || parseFloat(levels) * 3.3 || fallback)) * 0.73;
+    || parseFloat(levels) * 3.3 || fallback)) * 0.73 * mapScale;
   const palette = palettes[Math.floor(random() * palettes.length)];
   const [roof, light, dark, trim] = roofSample
     ? [0, 0.17, -0.2, 0.31].map(amount => {
@@ -302,7 +308,8 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
     const [a, b, c, d] = distance(metres[0], metres[1]) < distance(metres[1], metres[2])
       ? top : [top[1], top[2], top[3], top[0]];
     const r1 = midpoint(a, b, 0.5), r2 = midpoint(d, c, 0.5);
-    const ridge = measured ? Math.min(5, measured[1] * 0.73) : Math.min(4.5, Math.max(1.6, Math.sqrt(size) * 0.16));
+    const ridge = measured ? Math.min(5 * mapScale, measured[1] * 0.73 * mapScale)
+      : Math.min(4.5 * mapScale, Math.max(1.6 * mapScale, Math.sqrt(size) * 0.16));
     r1[1] -= ridge;
     r2[1] -= ridge;
     fill(ctx, [a, r1, r2, d], light);
@@ -349,9 +356,12 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
         ctx.fillRect(Math.round(cx + 11), Math.round(cy + 7), 9, 1);
       }
     }
+    if (landmark === 'te-awa') paintTeAwaRoof(ctx, project, lift + tall);
     ctx.restore();
   }
-  if (landmark) paintLandmark(ctx, landmark, ground, top);
+  if (landmark === 'te-awa') {
+    paintTeAwaEntrance(ctx, (x, y) => elevation.point(project(x, y)));
+  } else if (landmark) paintLandmark(ctx, landmark, ground, top);
 }
 
 function paintTree(ctx, x, y, height, radius, seed) {
@@ -419,7 +429,7 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
     for (const { shape, rings } of areaLayers.get(kind) || []) {
       ctx.fillStyle = colour;
       ctx.fill(shape, 'evenodd');
-      stroke(ctx, shape, '#dddcaa72', 1.3);
+      if (kind !== 'parking') stroke(ctx, shape, '#dddcaa72', 1.3);
       if (kind === 'pitch') {
         const points = rings[0].map(p => project(...p));
         const [cx, cy] = centre(points);
@@ -451,7 +461,8 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
     const yard = ground.map(([x, y]) => [x + (x - cx) * 0.4 + 1, y + (y - cy) * 0.55]);
     fill(ctx, yard, type === 'commercial' || type === 'industrial' ? '#bcb4a1'
       : ['#b6ba8e','#a2aa77','#b2b17e','#bec097'][Math.floor(random() * 4)]);
-    const key = [...ring[0], ...ring[1], ring.length].join(',');
+    const key = [...ring[0], ...ring[1], ...ring[2], ring.length].join(',');
+    const landmarkKey = [...ring[0], ...ring[1], ring.length].join(',');
     const measured = lidar.buildings[key];
     const lotRandom = randomSource(Math.round(cx * 253 + cy * 119));
     if (Math.abs(area(metres)) < 300 && lotRandom() < 0.64) {
@@ -462,10 +473,19 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
       ctx.fillRect(Math.round(ex), Math.round(ey), 2, 1);
     }
     const courtyards = holes.map(hole => hole.slice(0, -1).map(point => project(...point)));
-    return { ground, metres, type, taggedHeight, levels, measured, cx, cy, courtyards, roofSample: aerial?.roofs[key], landmark: landmarkBuildings[key] };
+    return { ground, metres, type, taggedHeight, levels, measured, cx, cy, courtyards, roofSample: aerial?.roofs[key], landmark: landmarkBuildings[landmarkKey] };
   });
 
-  if (aerial) ctx.drawImage(aerial.ground, 0, 0);
+  if (aerial) {
+    ctx.drawImage(aerial.ground, 0, 0);
+    // Give the photographed pavement and bay markings more weight inside mapped lots.
+    for (const { shape } of areaLayers.get('parking') || []) {
+      ctx.save();
+      ctx.clip(shape, 'evenodd');
+      ctx.drawImage(aerial.ground, 0, 0);
+      ctx.restore();
+    }
+  }
 
   const waterPaths = areaLayers.get('water') || [];
   // Paint every shoreline first so adjacent water polygons cover their shared edges.
@@ -528,13 +548,15 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
     if (!size || tunnel) return [];
     const flat = line.map(p => project(...p));
     const points = elevation.route(flat, bridge);
-    return [{ kind, bridge, size, flat, points, steps: Array.isArray(detail) ? detail : undefined,
+    return [{ kind, bridge, size, width: size * mapScale, flat, points, steps: Array.isArray(detail) ? detail : undefined,
       parkingAisle: detail === 'parking_aisle', shape: path(bridge ? points : flat) }];
   }).sort((a, b) => Number(a.bridge) - Number(b.bridge) || a.size - b.size);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   for (const bridge of [false, true]) {
     if (bridge) {
+      paintTeAwaParking(ctx, project);
+      paintPedestrianAreas(ctx, project);
       paintCrossings(ctx, project, routes, data.streetDetails ?? []);
       elevation.paintShade(ctx);
       elevation.paintGround(ctx);
@@ -542,22 +564,22 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
     }
     const pass = routes.filter(route => route.bridge === bridge && !(aerial && route.parkingAisle));
     for (const route of pass) {
-      if (bridge) stroke(ctx, route.shape, '#33565775', route.size + 7);
-      if (route.kind !== 'service') stroke(ctx, route.shape, bridge ? '#d7caba' : '#ded3b5', route.size + 2.5);
+      if (bridge) stroke(ctx, route.shape, '#33565775', route.width + 7 * mapScale);
+      if (route.kind !== 'service') stroke(ctx, route.shape, bridge ? '#d7caba' : '#ded3b5', route.width + 2.5 * mapScale);
     }
-    for (const { kind, shape, size } of pass) {
+    for (const { kind, shape, size, width: roadWidth } of pass) {
       const surface = kind === 'rail' ? '#6d625c' : size < 3 ? '#cfbd92' : '#727e80';
-      stroke(ctx, shape, surface, size);
+      stroke(ctx, shape, surface, roadWidth);
       if (size >= 8 || kind === 'rail') {
         ctx.setLineDash(kind === 'rail' ? [1, 3] : [5, 6]);
-        stroke(ctx, shape, kind === 'rail' ? '#b7a892' : '#e1d5a7', kind === 'rail' ? 4.8 : 0.85);
+        stroke(ctx, shape, kind === 'rail' ? '#b7a892' : '#e1d5a7', (kind === 'rail' ? 4.8 : 0.85) * mapScale);
         ctx.setLineDash([]);
       }
     }
   }
 
   // The bridge deck edges catch the light and posts give the spans a readable rhythm.
-  for (const { bridge, size, points } of routes) {
+  for (const { bridge, size, width: roadWidth, points } of routes) {
     if (!bridge || size < 6) continue;
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1], b = points[i];
@@ -565,7 +587,7 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
       const length = Math.hypot(dx, dy);
       if (length < 2) continue;
       for (const side of [-1, 1]) {
-        const offset = side * (size / 2 + 0.4) / length;
+        const offset = side * (roadWidth / 2 + 0.4) / length;
         const rail = [[a[0] - dy * offset, a[1] + dx * offset], [b[0] - dy * offset, b[1] + dx * offset]];
         stroke(ctx, path(rail), side === 1 ? '#4c6364' : '#e0ceb0', 1);
         for (let d = 3; d < length; d += 5) {
@@ -607,25 +629,33 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
     const [x, y] = elevation.point(project(east, south)).map(Math.round);
     if (x < -20 || x > width + 20 || y < -20 || y > height + 20) continue;
     const seed = Math.round(east * 199 + south * 523);
-    objects.push({ y, draw: () => paintTree(front, x, y, treeHeight, radius * 1.05, seed) });
+    objects.push({ y, draw: () => paintTree(front, x, y, treeHeight * mapScale, radius * 1.05 * mapScale, seed) });
   }
   objects.sort((a, b) => a.y - b.y).forEach(object => object.draw());
 
   const crossings = routes.filter(route => route.bridge);
   const visibleRipples = ripples.map(([x, y, length, phase]) => [
     x, elevation.point([x, y])[1], length, phase,
-  ]).filter(([x, y]) => !crossings.some(({ shape, size }) => {
-    ctx.lineWidth = size + 3;
+  ]).filter(([x, y]) => !crossings.some(({ shape, width: roadWidth }) => {
+    ctx.lineWidth = roadWidth + 3 * mapScale;
     return ctx.isPointInStroke(shape, x, y);
   }));
 
   const actors = [];
-  const busyPlaces = places.filter(place => !place.bridge).map(place => project(place.x, place.y));
+  const activityRandom = randomSource(91487);
+  const busyPlaces = places.map(place => project(place.x, place.y));
+  const riverPlaces = places.filter(place => place.bridge || ['Waikato Museum', 'Made Hamilton', 'Hamilton Gardens']
+    .includes(place.name)).map(place => project(place.x, place.y));
+  const near = (points, centres, radius) => points.some(([x, y]) =>
+    centres.some(([px, py]) => Math.hypot(px - x, py - y) < radius));
+  const clothing = ['#e2bc76', '#bc5149', '#285b77', '#cf8548', '#ece1c7', '#4b816e', '#92608a'];
+  const outfit = () => clothing[Math.floor(activityRandom() * clothing.length)];
   for (const { kind, size, points } of routes) {
-    const walking = ['footway', 'path', 'pedestrian', 'cycleway'].includes(kind);
-    const busy = points.some(([x, y]) => busyPlaces.some(([px, py]) =>
-      Math.abs(px - x) < 160 && Math.abs(py - y) < 115));
-    if (walking ? !busy && random() < 0.92 : size < 6 || kind === 'rail' || random() < 0.45) continue;
+    const walking = ['footway', 'path', 'pedestrian', 'cycleway', 'steps'].includes(kind);
+    const busy = walking && near(points, busyPlaces, 115);
+    const riverside = walking && kind !== 'steps' && near(points, riverPlaces, 85);
+    if (walking ? !busy && kind !== 'cycleway' && activityRandom() < 0.88
+      : size < 6 || kind === 'rail' || activityRandom() < 0.45) continue;
     const segments = [];
     let distance = 0;
     for (let i = 1; i < points.length; i++) {
@@ -635,20 +665,41 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
       segments.push({ a, b, start: distance, end: distance + length, length });
       distance += length;
     }
-    if (distance < (walking ? 17 : 34)) continue;
-    const spacing = walking ? 72 : 94;
+    if (distance < (walking ? busy ? 10 : 22 : 34)) continue;
+    const spacing = walking ? busy ? 41 : 74 : 94;
+    const xs = points.map(([x]) => x), ys = points.map(([, y]) => y);
+    const bounds = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
     for (let d = 0; d < distance; d += spacing) {
-      const cyclist = walking && (kind === 'cycleway' || random() < 0.1);
-      const vehicle = !walking && size >= 8 && random() < 0.15 ? 8 : 4.5;
-      actors.push({ segments, distance, phase: (d + random() * Math.min(spacing, distance)) % distance,
-        speed: cyclist ? 4 + random() * 2 : walking ? 1.1 + random() * 0.55 : 7 + random() * 5,
-        direction: random() > 0.5 ? 1 : -1, lane: walking ? 0.55 : size * 0.21,
-        walking, cyclist, vehicle,
-        colour: ['#f6dfad', '#c85b4d', '#30566a', '#dfa648', '#e8e0c9', '#60907e'][Math.floor(random() * 6)] });
+      const cyclist = walking && (kind === 'cycleway' || (riverside && kind === 'path' && activityRandom() < 0.26));
+      const companion = walking && !cyclist && busy && distance >= 20 && activityRandom() < 0.29 ? outfit() : null;
+      const vehicle = !walking && size >= 8 && activityRandom() < 0.15 ? 8 : 4.5;
+      actors.push({ segments, distance, bounds, phase: (d + activityRandom() * Math.min(spacing, distance)) % distance,
+        speed: cyclist ? 3 + activityRandom() * 1.6 : walking ? 0.8 + activityRandom() * 0.55 : 7 + activityRandom() * 5,
+        direction: activityRandom() > 0.5 ? 1 : -1, lane: (walking ? 0.55 : size * 0.21) * mapScale,
+        walking, cyclist, companion, vehicle: vehicle * mapScale, colour: outfit() });
     }
   }
 
-  const plazaVisitors = [];
+  const plazaVisitors = teAwaVisitors.map(([east, south, colour]) => {
+    const [x, y] = elevation.point(project(east, south));
+    return { x, y, colour };
+  });
+  gatheringSpots.forEach(([east, south], index) => {
+    const [x, y] = project(east, south);
+    const offsets = index % 3 === 0 ? [[0, 0], [2.6, 0.9], [0.9, 2.6]] : [[0, 0], [2.6, 1.5]];
+    for (const [dx, dy] of offsets) {
+      const [px, py] = elevation.point([x + dx, y + dy]);
+      plazaVisitors.push({ x: px, y: py, colour: outfit() });
+    }
+  });
+  for (const [kind, east, south, shelter] of data.streetDetails ?? []) {
+    if (kind !== 'bus' || !shelter) continue;
+    const point = project(east, south);
+    if (!near([point], busyPlaces, 95) || activityRandom() > 0.65) continue;
+    const [x, y] = elevation.point(point);
+    plazaVisitors.push({ x: x + 2, y: y + 1, colour: outfit() });
+    if (activityRandom() < 0.5) plazaVisitors.push({ x: x - 2, y: y + 2, colour: outfit() });
+  }
   for (const { shape, rings } of areaLayers.get('plaza') || []) {
     const points = rings[0].map(point => project(...point));
     const [cx, cy] = centre(points);
@@ -679,10 +730,13 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
 }
 
 function paintPerson(ctx, x, y, colour, stride = 0) {
+  x = Math.round(x);
+  y = Math.round(y);
   ctx.fillStyle = '#34494485';
   ctx.fillRect(x, y, 3, 1);
   ctx.fillStyle = '#343f4d';
   ctx.fillRect(x + stride, y - 1, 1, 2);
+  ctx.fillRect(x - stride, y - 1, 1, 1);
   ctx.fillStyle = colour;
   ctx.fillRect(x - 1, y - 3, 2, 2);
   ctx.fillStyle = '#e5b184';
@@ -702,7 +756,11 @@ export function paintMovement(ctx, layers, time, bounds) {
       paintPerson(ctx, x, y, colour);
     }
   }
-  for (const { segments, distance, phase, speed, direction, lane, colour, walking, cyclist, vehicle } of layers.actors) {
+  for (const { segments, distance, bounds: routeBounds, phase, speed, direction, lane,
+    colour, walking, cyclist, companion, vehicle } of layers.actors) {
+    const [left, top, right, bottom] = routeBounds;
+    if (right + 5 < bounds.left || left - 5 > bounds.right
+      || bottom + 5 < bounds.top || top - 5 > bounds.bottom) continue;
     const along = (phase + time * speed) % distance;
     const offset = direction > 0 ? along : distance - along;
     const segment = segments.find(s => offset <= s.end) || segments.at(-1);
@@ -720,16 +778,30 @@ export function paintMovement(ctx, layers, time, bounds) {
     ctx.translate(Math.round(x), Math.round(y));
     if (walking && !cyclist) {
       const stride = Math.sin(time * 11 + phase) > 0 ? -1 : 0;
+      if (companion) paintPerson(ctx, -dx * 3 + dy, -dy * 3 - dx, companion, -stride);
       paintPerson(ctx, 0, 0, colour, stride);
+    } else if (cyclist) {
+      ctx.save();
+      ctx.rotate(Math.atan2(dy, dx));
+      ctx.fillStyle = '#334448';
+      ctx.fillRect(-2, 0, 1.3, 1);
+      ctx.fillRect(1, 0, 1.3, 1);
+      ctx.fillStyle = '#a7aaa0';
+      ctx.fillRect(-1, -0.4, 2.6, 0.65);
+      ctx.restore();
+      ctx.fillStyle = colour;
+      ctx.fillRect(-0.8, -2, 1.6, 1.5);
+      ctx.fillStyle = '#f0d6aa';
+      ctx.fillRect(dx * 0.7, -2.8, 0.9, 0.8);
     } else {
       ctx.fillStyle = '#34494485';
       ctx.fillRect(0, 0, 5, 1);
       ctx.rotate(Math.atan2(dy, dx));
-      const body = cyclist ? 3.5 : vehicle;
+      const body = vehicle;
       ctx.fillStyle = '#394951';
-      ctx.fillRect(-body / 2, -0.5, body + 0.5, cyclist ? 1.5 : 2.8);
+      ctx.fillRect(-body / 2, -0.5, body + 0.5, 2.8);
       ctx.fillStyle = colour;
-      ctx.fillRect(-body / 2, -1.5, body, cyclist ? 1.5 : 2.6);
+      ctx.fillRect(-body / 2, -1.5, body, 2.6);
       ctx.fillStyle = '#839caa';
       ctx.fillRect(body / 2 - 1.6, -1.4, 0.9, 2);
       ctx.fillStyle = '#ffe5a9';

@@ -10,21 +10,19 @@ from rasterio.features import rasterize
 from rasterio.transform import Affine
 from scipy.ndimage import binary_erosion, distance_transform_edt, gaussian_filter, label
 
+from map_extent import WIDTH, HEIGHT, ground, screen
+
 ROOT = Path(__file__).resolve().parents[1]
 lidar = run_path(str(ROOT / 'scripts/import-lidar.py'))
-WIDTH, HEIGHT, STEP = 3660, 2360, 2
-ANGLE, PITCH = np.pi / 9, 0.68
-COS, SIN = np.cos(ANGLE), np.sin(ANGLE)
+STEP = 2
 
 
 def main():
     x, y = np.meshgrid(np.arange(0, WIDTH + STEP, STEP), np.arange(0, HEIGHT + STEP, STEP))
-    across, depth = x - 1290, (y - 1105) / PITCH
-    east, north = lidar['nz_grid'](COS * across - SIN * depth, SIN * across + COS * depth)
+    east, north = lidar['nz_grid'](*ground(x, y))
     bounds = (int(east.min()) - 4, int(north.min()) - 4,
               int(east.max()) + 4, int(north.max()) + 4)
-    dem, transform = lidar['read_raster']('dem_1m', bounds,
-                                        (*lidar['TILES'], 'BD34_10000_0301', 'BD34_10000_0401'))
+    dem, transform = lidar['read_raster']('dem_1m', bounds)
     cols, rows = (~transform) * (east, north)
     samples = dem[rows.astype(int), cols.astype(int)]
     measured = np.isfinite(samples)
@@ -44,9 +42,7 @@ def main():
             continue
         coordinates = []
         for ring in rings:
-            ex, sy = np.asarray(ring).T
-            coordinates.append(list(zip(1290 + COS * ex + SIN * sy,
-                                        1105 + PITCH * (COS * sy - SIN * ex))))
+            coordinates.append(list(zip(*screen(*np.asarray(ring).T))))
         water.append({'type': 'Polygon', 'coordinates': coordinates})
     mask = rasterize(water, out_shape=samples.shape,
                      transform=Affine.translation(-STEP / 2, -STEP / 2) * Affine.scale(STEP)).astype(bool)

@@ -13,11 +13,17 @@ from rasterio.merge import merge
 from rasterio.windows import Window
 from scipy.ndimage import maximum_filter, minimum_filter
 
+from map_extent import WIDTH, HEIGHT, footprint_key, ground, screen
+
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = 'https://nz-elevation.s3.ap-southeast-2.amazonaws.com/waikato/hamilton_2023'
-TILES = ('BD33_10000_0304', 'BD33_10000_0305', 'BD33_10000_0404', 'BD33_10000_0405')
+TILES = tuple(f'{sheet}_10000_{row:02}{col:02}'
+              for sheet, rows, columns in [('BD33', range(2, 6), (4, 5)),
+                                           ('BD34', range(3, 6), (1, 2))]
+              for row in rows for col in columns) + ('BD33_10000_0303', 'BD33_10000_0403',
+                                                     'BD34_10000_0201')
 # Local east/south coordinates match import-osm.py.
-WEST, NORTH, EAST, SOUTH, STEP = -2400, -2450, 2560, 2450, 5
+WEST, NORTH, EAST, SOUTH, STEP = -3300, -3300, 3500, 3450, 5
 TRANSFORM = Transformer.from_crs('EPSG:4326', 'EPSG:2193', always_xy=True)
 
 
@@ -53,7 +59,7 @@ def building_heights(buildings, dem, dsm, transform):
     heights = {}
     seen = set()
     for _, _, _, ring, *courtyards in buildings:
-        key = ','.join(format(v, '.10g') for v in (*ring[0], *ring[1], len(ring)))
+        key = footprint_key(ring)
         if key in seen:
             raise ValueError(f'Duplicate footprint key: {key}')
         seen.add(key)
@@ -121,12 +127,16 @@ def canopy_points(map_data, dem, dsm, transform):
     cols, rows, heights, radii = np.asarray(crowns).T
     e, n = transform * (cols, rows)
     lon, lat = TRANSFORM.transform(e, n, direction='INVERSE')
-    return np.round(np.column_stack(((lon - 175.286) * 87900, (-37.792 - lat) * 111000,
-                                     heights, radii)), 1).tolist()
+    east, south = (lon - 175.286) * 87900, (-37.792 - lat) * 111000
+    x, y = screen(east, south)
+    inside = (x >= -20) & (x <= WIDTH + 20) & (y >= -20) & (y <= HEIGHT + 20)
+    return np.round(np.column_stack((east, south, heights, radii))[inside], 1).tolist()
 
 
 def main():
-    e, n = nz_grid([WEST, WEST, EAST, EAST], [NORTH, SOUTH, NORTH, SOUTH])
+    corners = [ground(x, y) for x in (-120, WIDTH + 120) for y in (-120, HEIGHT + 120)]
+    corners.extend((x, y) for x in (WEST, EAST) for y in (NORTH, SOUTH))
+    e, n = nz_grid(*zip(*corners))
     bounds = (int(min(e))-8, int(min(n))-8, int(max(e))+8, int(max(n))+8)
     dem, transform = read_raster('dem_1m', bounds)
     print('Read bare-earth elevation', flush=True)

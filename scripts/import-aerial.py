@@ -11,24 +11,13 @@ import rasterio
 from rasterio.features import rasterize
 from scipy.ndimage import distance_transform_edt, gaussian_filter
 
+from map_extent import WIDTH, HEIGHT, footprint_key, ground, screen
+
 ROOT = Path(__file__).resolve().parents[1] / 'dist'
 SOURCE = 'https://nz-imagery.s3.ap-southeast-2.amazonaws.com/waikato/hamilton_2024-2025_0.05m/rgb/2193'
-WIDTH, HEIGHT = 3660, 2360
-# Match the orthographic ground plane in city.js.
-ANGLE, PITCH = np.pi / 9, 0.68
-ORIGIN_X, ORIGIN_Y = 1290, 1105
-
-
-def screen(x, y):
-    return (ORIGIN_X + np.cos(ANGLE) * x + np.sin(ANGLE) * y,
-            ORIGIN_Y + PITCH * (np.cos(ANGLE) * y - np.sin(ANGLE) * x))
-
-
 def load_aerial():
     x, y = np.meshgrid(np.arange(WIDTH) + 0.5, np.arange(HEIGHT) + 0.5)
-    across, depth = x - ORIGIN_X, (y - ORIGIN_Y) / PITCH
-    east = np.cos(ANGLE) * across - np.sin(ANGLE) * depth
-    south = np.sin(ANGLE) * across + np.cos(ANGLE) * depth
+    east, south = ground(x, y)
     transformer = Transformer.from_crs(4326, 2193, always_xy=True)
     e, n = transformer.transform(175.286 + east / 87900, -37.792 - south / 111000)
     columns = np.floor((e - 1789600) / 480).astype(int)
@@ -81,7 +70,7 @@ def footprints(photo, valid):
         holes = courtyards[0] if courtyards else []
         coordinates = [list(zip(x, y)), *(list(zip(*screen(*np.asarray(hole).T))) for hole in holes)]
         geometry.append(({'type': 'Polygon', 'coordinates': coordinates}, len(keys) + 1))
-        keys.append(','.join(format(v, '.10g') for v in (*ring[0], *ring[1], len(ring))))
+        keys.append(footprint_key(ring))
     ids = rasterize(geometry, out_shape=valid.shape, dtype='int32')
     roofs = {}
     inside = (ids > 0) & valid

@@ -43,7 +43,7 @@ export function paintCrossings(ctx, project, routes, details) {
         const centre = mix(a, b, t);
         const gap = Math.hypot(x - centre[0], y - centre[1]);
         if (gap >= distance) continue;
-        nearest = { centre, dx: dx / length, dy: dy / length, half: route.size * 0.49 };
+        nearest = { centre, dx: dx / length, dy: dy / length, half: route.width * 0.49 };
         distance = gap;
       }
     }
@@ -134,7 +134,7 @@ export function streetFurniture(project, elevation, details) {
 }
 
 export function paintSteps(ctx, routes, elevation) {
-  for (const { steps, flat, size } of routes) {
+  for (const { steps, flat, width } of routes) {
     if (!steps) continue;
     const [count, handrail] = steps;
     const segments = [];
@@ -154,8 +154,8 @@ export function paintSteps(ctx, routes, elevation) {
       while (segment < segments.length - 1 && distance > segments[segment + 1].start) segment++;
       const { a, b, start, run } = segments[segment];
       const [x, y] = mix(a, b, (distance - start) / run);
-      const dx = -(b[1] - a[1]) / run * size * 0.72;
-      const dy = (b[0] - a[0]) / run * size * 0.72;
+      const dx = -(b[1] - a[1]) / run * width * 0.72;
+      const dy = (b[0] - a[0]) / run * width * 0.72;
       const lift = elevation.lift(x, y);
       const left = [x - dx, y - dy - lift], right = [x + dx, y + dy - lift];
       line(ctx, left, right, i % 2 ? '#8d8979' : '#e5dbc2', 0.6);

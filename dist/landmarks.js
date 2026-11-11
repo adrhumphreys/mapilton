@@ -9,6 +9,7 @@ export const landmarkBuildings = {
   '-38.4,-258.3,-20.3,-233.8,5': 'artspost',
   '1425.6,1517.5,1455.1,1553.9,16': 'gardens-pavilion',
   '-1128.1,-645.2,-1129.3,-641,16': 'seddon-pavilion',
+  '-4501.8,-4696.9,-4510.8,-4706.5,38': 'te-awa',
 };
 
 function polygon(ctx, points, colour) {

@@ -6,6 +6,8 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
+from map_extent import in_scene
+
 OUTPUT = Path(__file__).resolve().parents[1] / 'dist' / 'hamilton.json'
 ENDPOINT = 'https://api.openstreetmap.org/api/0.6/map'
 
@@ -159,20 +161,33 @@ def convert(snapshot):
             if tags.get('service') == 'parking_aisle':
                 road.append('parking_aisle')
             scene['roads'].append(road)
+    scene['areas'] = [area for area in scene['areas'] if in_scene([p for ring in area[1] for p in ring])]
+    scene['buildings'] = [building for building in scene['buildings'] if in_scene(building[3])]
+    scene['roads'] = [road for road in scene['roads'] if in_scene(road[3])]
+    scene['trees'] = [tree for tree in scene['trees'] if in_scene([tree])]
+    scene['streetDetails'] = [detail for detail in scene['streetDetails'] if in_scene([detail[1:3]])]
     for key in ('areas', 'buildings', 'roads'):
         if not scene[key]:
             raise ValueError(f'OSM snapshot contains no {key}')
     return scene
 
 
-def fetch_tiles():
-    for column in range(4):
-        for row in range(4):
+def tile_bounds():
+    for column in range(-5, 8):
+        for row in range(-3, 9):
             west, south = 175.259 + column * 0.014, -37.814 + row * 0.011
-            bounds = (west, south, west + 0.014, south + 0.011)
-            url = ENDPOINT + '?bbox=' + ','.join(f'{v:.5f}' for v in bounds)
-            with urlopen(Request(url, headers={'User-Agent': 'PixelHamilton/1.0'}), timeout=60) as response:
-                yield ElementTree.parse(response).getroot()
+            east, north = west + 0.014, south + 0.011
+            corners = [((lon - 175.286) * 87900, (-37.792 - lat) * 111000)
+                       for lon in (west, east) for lat in (south, north)]
+            if in_scene(corners):
+                yield column, row, (west, south, east, north)
+
+
+def fetch_tiles():
+    for _, _, bounds in tile_bounds():
+        url = ENDPOINT + '?bbox=' + ','.join(f'{v:.5f}' for v in bounds)
+        with urlopen(Request(url, headers={'User-Agent': 'PixelHamilton/1.0'}), timeout=60) as response:
+            yield ElementTree.parse(response).getroot()
 
 
 def read_osm(tiles):

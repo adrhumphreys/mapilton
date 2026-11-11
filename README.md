@@ -10,13 +10,13 @@ From the repository root:
 python3 -m http.server 8000 --bind 127.0.0.1 --directory dist
 ```
 
-Open [localhost:8000](http://127.0.0.1:8000). Drag to pan, scroll or pinch to zoom, and choose a landmark to jump there. With the map focused, use the arrow keys, plus, minus, and Home.
+Open [localhost:8000](http://127.0.0.1:8000). Drag to pan, scroll or pinch to zoom, and choose a landmark to jump there. Zooming out stops when the map fills the window. With the map focused, use the arrow keys, plus, minus, and Home.
 
 ## Map source and rendering
 
-The bundled [OpenStreetMap](https://www.openstreetmap.org/copyright) extract was collected on 11 November 2026 and is available under the Open Database License (ODbL). It contains mapped roads, bridge alignments, building footprints, water, trees, and green spaces for central Hamilton. The browser loads the extract locally.
+The bundled [OpenStreetMap](https://www.openstreetmap.org/copyright) extract was collected on 11–12 November 2026 and is available under the Open Database License (ODbL). It contains mapped roads, bridge alignments, building footprints, water, trees, and green spaces from The Base in Te Rapa through central Hamilton to the University of Waikato in Hillcrest. The browser loads the extract locally.
 
-`dist/city.js` projects the geometry through a single orthographic camera and draws roofs, façades, shadows, canopies, roads, and shorelines. The 2023 Hamilton LiDAR survey from Toitū Te Whenua Land Information New Zealand supplies terrain shading and height estimates for 18,475 of the 19,057 mapped footprints. Heights come from the difference between the 1 m surface and bare-earth models within each footprint. Buildings without a usable estimate fall back to OpenStreetMap height or level tags, then to a procedural height. Measured terrain displaces the ground, structures and paths across the full map. The survey also provides probable canopy positions and approximate heights. The importer filters elevated returns against mapped buildings, roads, water, and paved areas. Crown shapes, roof materials, and decorative street details are illustrated. Traffic follows mapped road segments, with a separate foreground canvas for occlusion.
+`dist/city.js` projects the geometry through a single orthographic camera and draws roofs, façades, shadows, canopies, roads, and shorelines. The 2023 Hamilton LiDAR survey from Toitū Te Whenua Land Information New Zealand supplies terrain shading and building height estimates. Heights come from the difference between the 1 m surface and bare-earth models within each footprint. Buildings without a usable estimate fall back to OpenStreetMap height or level tags, then to a procedural height. Measured terrain displaces the ground, structures and paths across the full map. The survey also provides probable canopy positions and approximate heights. The importer filters elevated returns against mapped buildings, roads, water, and paved areas. Crown shapes, roof materials, and decorative street details are illustrated. Traffic follows mapped road segments, with a separate foreground canvas for occlusion.
 
 The bundled LiDAR derivatives use the [LINZ Hamilton 2023 DEM](https://nz-elevation.s3.ap-southeast-2.amazonaws.com/waikato/hamilton_2023/dem_1m/2193/collection.json) and [DSM](https://nz-elevation.s3.ap-southeast-2.amazonaws.com/waikato/hamilton_2023/dsm_1m/2193/collection.json), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The Victoria Bridge artwork follows its [Heritage New Zealand listing](https://www.heritage.org.nz/list-details/772/772).
 
@@ -45,3 +45,9 @@ Made Hamilton and the Cathedral of the Blessed Virgin Mary have hand-modelled de
 The OpenStreetMap importer collects mapped bus stops, cycle stands, benches, directional signals, crossings with known markings, street lamps, picnic tables, bins, and drinking fountains across the map. Crossing markings render where they can be aligned to a mapped road.
 
 Additional close-ups cover [ArtsPost in the former Hamilton Post Office](https://www.heritage.org.nz/list-details/5299/Hamilton%20Post%20Office%20%28Former%29), the [Hamilton Gardens pavilion and entry precinct](https://bhwstudio.nz/projects/hamilton-gardens), and the pavilion, fence and grass banks at [Seddon Park](https://seddonpark.com/assets/Uploads/seddon-park-access-map.pdf).
+
+The Base close-up models [Te Awa’s ribbed ETFE roof](https://www.rlb.com/oceania/projects/te-awa-the-base-stage-one/) on its mapped footprint. Roof sections, paths, planted islands, and selected surface parking rows follow the LINZ orthophoto. Entrance details, parking occupancy, and visitors are illustrated.
+
+The LINZ orthophoto also guides the parking rows and paths at the University of Waikato and Claudelands Bridge, and the paving and selected surface parking around Garden Place. Bay spacing and parked vehicles are illustrated.
+
+Illustrated visitors gather on paved areas, at selected bus shelters, and beside campus paths. Walkers and cyclists follow mapped routes. Reduced-motion mode keeps a still view of the same scene.
