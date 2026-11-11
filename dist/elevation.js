@@ -1,4 +1,4 @@
-// A local elevation grid in the same screen coordinates as the flat ground.
+// An elevation grid in the same screen coordinates as the flat ground.
 export function createElevation(grid) {
   const { left, top, width, height, step } = grid;
   const raw = Uint8Array.from(atob(grid.decimetres), character => character.charCodeAt(0));
@@ -7,15 +7,14 @@ export function createElevation(grid) {
   const bottom = top + (height - 1) * step;
   const sample = (x, y) => values.getInt16((y * width + x) * 2, true) * 0.073;
   function lift(x, y) {
-    const edge = Math.min(x - left, right - x, y - top, bottom - y);
-    if (edge <= 0) return 0;
-    const col = (x - left) / step, row = (y - top) / step;
-    const i = Math.floor(col), j = Math.floor(row);
+    const col = (Math.max(left, Math.min(right, x)) - left) / step;
+    const row = (Math.max(top, Math.min(bottom, y)) - top) / step;
+    const i = Math.min(width - 2, Math.floor(col));
+    const j = Math.min(height - 2, Math.floor(row));
     const u = col - i, v = row - j;
     const upper = sample(i, j) * (1 - u) + sample(i + 1, j) * u;
     const lower = sample(i, j + 1) * (1 - u) + sample(i + 1, j + 1) * u;
-    const taper = Math.min(1, edge / 100);
-    return (upper * (1 - v) + lower * v) * taper * taper * (3 - 2 * taper);
+    return upper * (1 - v) + lower * v;
   }
 
   function point([x, y]) {
@@ -46,13 +45,16 @@ export function createElevation(grid) {
   }
 
   function paintGround(context) {
-    const w = right - left + 1, h = bottom - top + 1;
+    const w = right - left, h = bottom - top;
     const source = context.getImageData(left, top, w, h);
     const target = context.createImageData(w, h);
     const input = new Uint32Array(source.data.buffer);
     const output = new Uint32Array(target.data.buffer);
     for (let x = 0; x < w; x++) {
-      let projected = 0;
+      let projected = -lift(x + left, top);
+      for (let y = 0; y < Math.min(h, Math.ceil(projected)); y++) {
+        output[y * w + x] = input[x];
+      }
       for (let y = 1; y < h; y++) {
         const next = y - lift(x + left, y + top);
         // Scan back to front so near slopes cover lower ground behind them.
@@ -64,7 +66,9 @@ export function createElevation(grid) {
         }
         projected = next;
       }
-      output[(h - 1) * w + x] = input[(h - 1) * w + x];
+      for (let y = Math.max(0, Math.ceil(projected)); y < h; y++) {
+        output[y * w + x] = input[(h - 1) * w + x];
+      }
     }
     context.putImageData(target, left, top);
   }

@@ -25,10 +25,10 @@ def nz_grid(x, y):
     return TRANSFORM.transform(175.286 + np.asarray(x) / 87900, -37.792 - np.asarray(y) / 111000)
 
 
-def read_raster(product, bounds):
+def read_raster(product, bounds, tiles=TILES):
     with rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN='EMPTY_DIR', GDAL_HTTP_TIMEOUT='45'), ExitStack() as stack:
         datasets = [stack.enter_context(rasterio.open(f'{SOURCE}/{product}/2193/{tile}.tiff'))
-                    for tile in TILES]
+                    for tile in tiles]
         raster, transform = merge(datasets, bounds=bounds, res=1, dtype='float32', nodata=np.nan)
     return raster[0], transform
 
