@@ -1,4 +1,4 @@
-import { width, height, project, places, paintCity, paintMovement } from './city.js';
+import { width, height, project, places, paintCity, paintMovement, paintBirds } from './city.js';
 
 const canvas = document.querySelector('#map');
 const context = canvas.getContext('2d');
@@ -29,7 +29,10 @@ composite.width = width;
 composite.height = height;
 const composed = composite.getContext('2d');
 composed.drawImage(scene, 0, 0);
+const mapBounds = { left: 0, top: 0, right: width, bottom: height };
+paintMovement(composed, layers, 0, mapBounds);
 composed.drawImage(layers.foreground, 0, 0);
+paintBirds(composed, layers.birds, 0, mapBounds);
 const miniBase = document.createElement('canvas');
 miniBase.width = mini.width;
 miniBase.height = mini.height;
@@ -97,6 +100,7 @@ function draw(time) {
     context.drawImage(scene, ...region, ...region);
     paintMovement(context, layers, time / 1000, bounds);
     context.drawImage(layers.foreground, ...region, ...region);
+    paintBirds(context, layers.birds, time / 1000, bounds);
   } else {
     context.drawImage(composite, ...region, ...region);
   }
@@ -154,7 +158,8 @@ function choose(index) {
   } else {
     const place = places[index];
     [x, y] = project(place.x, place.y);
-    scale = Math.min(4, Math.max(overviewScale * 2.5, 1.65));
+    x += place.viewOffsetX ?? 0;
+    scale = Math.min(4, Math.max(overviewScale * 2.5, place.viewScale ?? 1.65));
     const title = document.createElement('h2');
     const description = document.createElement('p');
     title.textContent = place.name;
