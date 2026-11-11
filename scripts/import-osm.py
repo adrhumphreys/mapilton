@@ -63,14 +63,42 @@ def area_kind(tags):
     return None
 
 
+def street_detail(tags):
+    highway = tags.get('highway')
+    markings = tags.get('crossing:markings', '')
+    if highway == 'crossing' or tags.get('traffic_signals') == 'pedestrian_crossing':
+        if markings == 'no' or tags.get('crossing') == 'unmarked':
+            return None
+        if markings.startswith('zebra') or tags.get('crossing') == 'zebra':
+            return 'crossing', 'zebra'
+        if markings in ('yes', 'lines') or tags.get('crossing') == 'traffic_signals' or tags.get('traffic_signals') == 'pedestrian_crossing':
+            return 'crossing', 'lines'
+    if highway == 'traffic_signals' and tags.get('traffic_signals:direction'):
+        return 'signal', None
+    if highway == 'bus_stop':
+        return 'bus', tags.get('shelter') == 'yes'
+    if tags.get('amenity') == 'bench':
+        return 'bench', None
+    if tags.get('amenity') == 'bicycle_parking' and tags.get('bicycle_parking') in ('stands', 'rack'):
+        capacity = tags.get('capacity', '')
+        return 'bicycle', min(8, max(1, int(capacity) // 2)) if capacity.isdecimal() else 3
+    return None
+
+
 def convert(snapshot):
     elements = snapshot['elements']
-    scene = {key: [] for key in ('areas', 'buildings', 'roads', 'trees')}
+    scene = {key: [] for key in ('areas', 'buildings', 'roads', 'trees', 'streetDetails')}
     for element in elements:
         tags = element.get('tags', {})
         kind = element['type']
-        if kind == 'node' and tags.get('natural') == 'tree':
-            scene['trees'].append(point(element))
+        if kind == 'node':
+            if tags.get('natural') == 'tree':
+                scene['trees'].append(point(element))
+            detail = street_detail(tags)
+            if detail:
+                feature, variant = detail
+                scene['streetDetails'].append([feature, *point(element), variant])
+            continue
         if kind == 'relation':
             if area_kind(tags) and tags.get('type') == 'multipolygon':
                 members = element.get('members', [])

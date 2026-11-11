@@ -1,4 +1,5 @@
-import { eastBuildings, paintEastBuilding, paintEastCrossings, eastFurniture } from './hamilton-east.js';
+import { landmarkBuildings, paintLandmark } from './landmarks.js';
+import { paintCrossings, streetFurniture } from './streets.js';
 
 // East/south metres are rotated onto an orthographic camera tilted 43° down.
 export const width = 3660;
@@ -16,13 +17,16 @@ export const places = [
   { name: 'Lake Rotoroa', lat: -37.798467, lon: 175.274928, viewScale: 1.02, viewOffsetX: 78, text: 'The Lake Domain curves around the shores of Hamilton Lake.' },
   { name: 'Seddon Park', lat: -37.786877, lon: 175.274529, text: 'Hamilton’s cricket oval sits between Frankton and the central city.' },
   { name: 'Garden Place', lat: -37.787605, lon: 175.282219, text: 'A pedestrian square linking the city centre to Victoria Street and the river.' },
-  { name: 'Claudelands', lat: -37.77951, lon: 175.289567, text: 'The events centre sits next to the old kahikatea stand at Jubilee Bush.' },
+  { name: 'Claudelands', lat: -37.77951, lon: 175.289567, viewScale: 2.35, hidePinAtCloseZoom: true, text: 'The arena and exhibition halls sit beside Jubilee Bush. The arena’s layered façade takes its cues from the forest canopy.' },
   { name: 'Hamilton Gardens', lat: -37.805214, lon: 175.302265, text: 'Enclosed gardens and open parkland beside a bend in the Waikato River.' },
   { name: 'Victoria Bridge', lat: -37.7913018, lon: 175.2897767, bridge: 'arch', text: 'The 1910 steel deck arch links Hamilton Central and Hamilton East.' },
   { name: 'Claudelands Bridge', lat: -37.7844701, lon: 175.2830619, bridge: 'truss', text: 'The steel truss crosses the Waikato River beside the former railway bridge.' },
   { name: 'Steele Park', lat: -37.794124, lon: 175.294721, viewScale: 0.98, viewOffsetX: -204, text: 'An open sports field beside Grey Street in Hamilton East.' },
   { name: 'Made Hamilton', lat: -37.792788, lon: 175.292541, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'The Grey Street market occupies the former Waikato Regional Council offices.' },
   { name: 'St Mary’s Cathedral', lat: -37.790302, lon: 175.29312, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'The Cathedral of the Blessed Virgin Mary rises above a broad entrance stair on Grey Street.' },
+  { name: 'Waikato Museum', lat: -37.789748, lon: 175.286535, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'Te Whare Taonga o Waikato Museum & Gallery sits on the riverbank off Grantham Street.' },
+  { name: 'Central Library', lat: -37.788180, lon: 175.282633, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'Te Koopuu Maania o Kirikiriroa faces Garden Place with a glazed façade and folded steel canopy.' },
+  { name: 'St Peter’s Cathedral', lat: -37.792297, lon: 175.286398, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'The Anglican cathedral and its square bell tower stand on Pukerangiora above Victoria Street.' },
 ].map(place => ({
   ...place,
   x: (place.lon - 175.286) * 87900,
@@ -287,7 +291,7 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
       : house ? ['#e6d3af', '#aa9d8b'] : ['#c8ba9b', '#9f9988'];
     fill(ctx, [top[i], top[j], b, a], walls[sunny ? 0 : 1]);
     const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const windows = landmark === 'cathedral' ? 0 : Math.floor(length / (house ? 5 : 4));
+    const windows = landmark === 'cathedral' || landmark === 'st-peter' ? 0 : Math.floor(length / (house ? 5 : 4));
     for (let level = 2; level < tall - 1; level += 2.8) {
       for (let k = 1; k <= windows; k++) {
         const [x, y] = midpoint(a, b, k / (windows + 1));
@@ -360,7 +364,7 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
     }
     ctx.restore();
   }
-  if (landmark) paintEastBuilding(ctx, landmark, ground, top);
+  if (landmark) paintLandmark(ctx, landmark, ground, top);
 }
 
 function paintTree(ctx, x, y, height, radius, seed) {
@@ -471,7 +475,7 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
       ctx.fillStyle = lotRandom() < 0.5 ? '#d2a978' : '#b17d76';
       ctx.fillRect(Math.round(ex), Math.round(ey), 2, 1);
     }
-    return { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample: aerial?.roofs[key], landmark: eastBuildings[key] };
+    return { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample: aerial?.roofs[key], landmark: landmarkBuildings[key] };
   });
 
   paintRelief(ctx, lidar.terrain);
@@ -544,7 +548,7 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
   ctx.lineJoin = 'round';
   for (const bridge of [false, true]) {
     if (bridge) {
-      paintEastCrossings(ctx, project, routes);
+      paintCrossings(ctx, project, routes, data.streetDetails ?? []);
       elevation.paintGround(ctx);
     }
     const pass = routes.filter(route => route.bridge === bridge);
@@ -599,7 +603,7 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
       bridgeMarkers.set(place, midpoint(crossing.points[0], crossing.points.at(-1), 0.5));
     }
   }
-  const objects = eastFurniture(project, elevation).map(({ y, draw }) => ({ y, draw: () => draw(front) }));
+  const objects = streetFurniture(project, elevation, data.streetDetails ?? []).map(({ y, draw }) => ({ y, draw: () => draw(front) }));
   for (const building of buildings) {
     const { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample, landmark } = building;
     if (cx < -120 || cx > width + 120 || cy < -120 || cy > height + 120) continue;

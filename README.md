@@ -38,6 +38,8 @@ From Victoria Bridge to Steele Park, the terrain uses samples from the 2023 LINZ
 
 To regenerate the elevation grid, use the LiDAR importer environment and run `python scripts/import-elevation.py`.
 
-## Hamilton East landmarks and streets
+## Landmarks and streets
 
-Made Hamilton and the Cathedral of the Blessed Virgin Mary have hand-modelled details on their mapped footprints. Their features are based on the [Made project record](https://www.edwardswhite.co.nz/projects/made), [Stark Property’s project description](https://www.starkproperty.co.nz/work/made-of-hamilton-east), and [PAUA Architects’ cathedral project](https://www.pauaarchitects.co.nz/individual-project-cathedral-of-the-blessed-virgin-mary). Feature dimensions are approximate. Selected bus stops, cycle stands, benches, signals and crossings use locations from the OpenStreetMap extract.
+Made Hamilton and the Cathedral of the Blessed Virgin Mary have hand-modelled details on their mapped footprints. Their features are based on the [Made project record](https://www.edwardswhite.co.nz/projects/made), [Stark Property’s project description](https://www.starkproperty.co.nz/work/made-of-hamilton-east), and [PAUA Architects’ cathedral project](https://www.pauaarchitects.co.nz/individual-project-cathedral-of-the-blessed-virgin-mary). Feature dimensions are approximate. The map also models the [Waikato Museum entrance](https://hamilton.govt.nz/your-council/news/community-environment/regions-museum-back-and-better-than-ever), [Central Library frontage](https://www.eboss.co.nz/ebossnow/vantage-windows-and-doors-glazed-facade-hamilton-central-library), [Claudelands Arena façade](https://claudelands.co.nz/spaces/about/our-architecture), and [St Peter’s Cathedral](https://www.stpeter.org.nz/history/).
+
+The OpenStreetMap importer collects mapped bus stops, cycle stands, benches, directional signals, and crossings with known markings across the map. Crossing markings render where they can be aligned to a mapped road.

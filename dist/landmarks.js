@@ -1,14 +1,12 @@
 // Footprints and street furniture coordinates are from the bundled OSM extract.
-export const eastBuildings = {
+export const landmarkBuildings = {
   '573.7,15.5,594.7,10.2,34': 'made',
   '648.1,-177.8,612.4,-167.6,13': 'cathedral',
+  '44.3,-289.5,22.4,-264.7,22': 'museum',
+  '-337.7,-451.6,-314.7,-468.7,13': 'library',
+  '304.6,-1311.9,248.7,-1283.6,11': 'arena',
+  '20.8,16,19,20,17': 'st-peter',
 };
-
-const busStops = [[614.5, 61], [613.4, 2.2], [687.7, 259.3, true], [729.9, -90.4], [748.3, -82.6]];
-const bikeStands = [[639.8, 79.4, 3], [618.8, 89.1, 4], [614.9, 8.5, 3]];
-const benches = [[514.2, 128.7], [496.4, 179.9], [503.4, 120.9]];
-const crossingPoints = [[643.9, 136.3], [783.7, -98.4]];
-const greySignals = [[597.3, -32.1], [580.6, -38.6], [588.9, -52.7], [605, -45.8], [598.9, -58.5]];
 
 function polygon(ctx, points, colour) {
   ctx.beginPath();
@@ -37,7 +35,7 @@ function raise([x, y], height) {
 }
 
 // Local architectural details share the footprint's perspective and ground elevation.
-export function paintEastBuilding(ctx, kind, ground, roof) {
+export function paintLandmark(ctx, kind, ground, roof) {
   if (kind === 'made') {
     const a = ground[1], b = ground[2];
     const start = mix(a, b, 0.18), end = mix(a, b, 0.62);
@@ -82,6 +80,10 @@ export function paintEastBuilding(ctx, kind, ground, roof) {
     return;
   }
 
+  if (kind !== 'cathedral') {
+    paintCityLandmark(ctx, kind, ground, roof);
+    return;
+  }
   // Brick piers, the glazed narthex, zinc roof planes and the cross above the entrance.
   const a = ground[2], b = ground[5];
   const steps = [a, b].map(([x, y]) => [x - 4.2, y + 2.6]);
@@ -108,74 +110,72 @@ export function paintEastBuilding(ctx, kind, ground, roof) {
   line(ctx, [cross[0] - 1.65, cross[1] - 3], [cross[0] + 1.65, cross[1] - 3], '#f0e0a8', 0.9);
 }
 
-export function paintEastCrossings(ctx, project, routes) {
-  for (const point of crossingPoints) {
-    const [x, y] = project(...point);
-    let nearest, distance = 7;
-    for (const route of routes) {
-      if (route.size < 6 || route.bridge) continue;
-      for (let i = 1; i < route.flat.length; i++) {
-        const a = route.flat[i - 1], b = route.flat[i];
-        const dx = b[0] - a[0], dy = b[1] - a[1];
-        const length = Math.hypot(dx, dy);
-        if (!length) continue;
-        const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (length * length)));
-        const centre = mix(a, b, t);
-        const gap = Math.hypot(x - centre[0], y - centre[1]);
-        if (gap >= distance) continue;
-        nearest = { centre, dx: dx / length, dy: dy / length, half: route.size * 0.49 };
-        distance = gap;
-      }
-    }
-    if (!nearest) continue;
-    const { centre: [cx, cy], dx, dy, half } = nearest;
-    for (const offset of [-1.7, 1.7]) {
-      const mx = cx + dx * offset, my = cy + dy * offset;
-      line(ctx, [mx - dy * half, my + dx * half], [mx + dy * half, my - dx * half], '#e9e2c5', 0.95);
-    }
-    for (const side of [-1, 1]) {
-      const ex = cx - dy * side * (half + 0.8), ey = cy + dx * side * (half + 0.8);
-      ctx.fillStyle = '#d6ab65';
-      ctx.fillRect(ex - 1, ey - 0.65, 2, 1.3);
-    }
+function paintGlazing(ctx, a, b, height, count, glass, frame) {
+  polygon(ctx, [a, b, raise(b, height), raise(a, height)], glass);
+  for (let i = 0; i <= count; i++) {
+    const p = mix(a, b, i / count);
+    line(ctx, p, raise(p, height), frame, 0.65);
   }
 }
 
-export function eastFurniture(project, elevation) {
-  const objects = [];
-  const add = (points, draw) => {
-    for (const [east, south, variant] of points) {
-      const [x, y] = elevation.point(project(east, south));
-      objects.push({ y, draw: ctx => draw(ctx, Math.round(x), Math.round(y), variant) });
+function paintCityLandmark(ctx, kind, ground, roof) {
+  if (kind === 'museum') {
+    const ridgeA = raise(mix(roof[0], roof[18], 0.55), 3.3);
+    const ridgeB = raise(mix(roof[9], roof[10], 0.58), 4.8);
+    polygon(ctx, [roof[0], roof[1], roof[6], roof[9], ridgeB, ridgeA], '#727e7a');
+    polygon(ctx, [ridgeA, ridgeB, roof[10], roof[13], roof[15], roof[18]], '#939c91');
+    for (const t of [0.18, 0.35, 0.52, 0.69, 0.86]) {
+      const ridge = mix(ridgeA, ridgeB, t);
+      line(ctx, mix(roof[1], roof[9], t), ridge, '#bac1aa50', 0.7);
+      line(ctx, ridge, mix(roof[18], roof[10], t), '#65726c50', 0.7);
     }
-  };
-  add(busStops, (ctx, x, y, shelter) => {
-    line(ctx, [x, y], [x, y - 4], '#4d5c55');
-    ctx.fillStyle = '#d2ded2';
-    ctx.fillRect(x - 1, y - 5, 2.6, 1.5);
-    ctx.fillStyle = '#478f65';
-    ctx.fillRect(x - 1, y - 5, 2.6, 0.7);
-    if (shelter) {
-      polygon(ctx, [[x - 6, y - 3], [x - 1, y - 3], [x - 1, y], [x - 6, y]], '#71918b');
-      line(ctx, [x - 7, y - 3.8], [x - 0.4, y - 3.8], '#3e5c57', 1.5);
+    line(ctx, ridgeA, ridgeB, '#c4c8ae', 0.85);
+    const a = mix(ground[9], ground[10], 0.25), b = mix(ground[9], ground[10], 0.75);
+    paintGlazing(ctx, a, b, 4.2, 4, '#648081', '#b3b2a0');
+    line(ctx, raise(a, 4.6), raise(b, 4.6), '#a15a43', 2.1);
+    line(ctx, a, raise(a, 4.7), '#a15a43', 1.3);
+    line(ctx, b, raise(b, 4.7), '#a15a43', 1.3);
+    return;
+  }
+  if (kind === 'library') {
+    const [a, b] = [ground[0], ground[1]];
+    paintGlazing(ctx, a, b, 5.1, 9, '#6a8990', '#b7bbb1');
+    for (let i = 0; i < 7; i++) {
+      const from = raise(mix(a, b, i / 7), 4.7), to = raise(mix(a, b, (i + 1) / 7), 4.7);
+      polygon(ctx, [from, [from[0] - 1.4, from[1] - 2.5], to], i % 2 ? '#b37d59' : '#965e43');
     }
-  });
-  add(bikeStands, (ctx, x, y, count) => {
-    for (let i = 0; i < count; i++) {
-      line(ctx, [x + i * 1.5, y], [x + i * 1.5, y - 1.4], '#697d75', 0.75);
-      ctx.fillStyle = '#c6cfc0';
-      ctx.fillRect(x + i * 1.5, y - 1.5, 0.8, 0.6);
+    line(ctx, raise(a, 4.7), raise(b, 4.7), '#754b39', 0.85);
+    return;
+  }
+  if (kind === 'arena') {
+    const a = ground[1], b = ground[6];
+    paintGlazing(ctx, a, b, 6.2, 18, '#567376', '#a4aca5');
+    const veil = ['#343e3d', '#697069', '#a57351', '#5b6861', '#a2a39a', '#465550'];
+    for (let i = 0; i < veil.length; i++) {
+      const z = 6.4 + i * 1.22;
+      line(ctx, raise(a, z), raise(b, z), veil[i], 1.2);
     }
-  });
-  add(benches, (ctx, x, y) => {
-    line(ctx, [x - 1, y], [x - 1, y - 1.5], '#46564b', 0.8);
-    line(ctx, [x + 2, y], [x + 2, y - 1.5], '#46564b', 0.8);
-    line(ctx, [x - 1.5, y - 1.5], [x + 2.5, y - 1.5], '#ad8157');
-  });
-  add(greySignals, (ctx, x, y) => {
-    line(ctx, [x, y], [x, y - 4], '#666b60', 0.8);
-    ctx.fillStyle = '#3b4740';
-    ctx.fillRect(x - 0.55, y - 5, 1.4, 2.8);
-  });
-  return objects;
+    line(ctx, raise(a, 13.8), raise(b, 13.8), '#414947', 1.45);
+    const a2 = mix(roof[1], roof[0], 0.15), b2 = mix(roof[6], roof[7], 0.15);
+    line(ctx, a2, b2, '#b2b9ac', 1);
+    return;
+  }
+
+  // St Peter’s existing square bell tower and the pitched nave below it.
+  const ridgeA = raise(mix(roof[0], roof[3], 0.5), 4);
+  const ridgeB = raise(mix(roof[7], roof[13], 0.5), 5.1);
+  polygon(ctx, [roof[0], ridgeA, ridgeB, roof[13], roof[15]], '#7f5244');
+  polygon(ctx, [ridgeA, roof[3], roof[4], roof[6], roof[7], ridgeB], '#aa7056');
+  line(ctx, ridgeA, ridgeB, '#c3946d', 0.7);
+  const corners = [ground[7], ground[8], ground[9], ground[10]];
+  const top = corners.map(point => raise(point, 14.9));
+  polygon(ctx, [corners[0], corners[1], top[1], top[0]], '#ac9b82');
+  polygon(ctx, [corners[1], corners[2], top[2], top[1]], '#978770');
+  polygon(ctx, top, '#706c60');
+  for (let i = 0; i < 3; i++) {
+    line(ctx, top[i], raise(top[i], 1.2), '#d1c1a0', 1.05);
+    const window = mix(corners[i], corners[i + 1], 0.5);
+    line(ctx, raise(window, 9.3), raise(window, 12), '#4d524a', 1.1);
+  }
+  line(ctx, raise(top[0], 0.5), raise(top[1], 0.5), '#c5b797', 0.8);
 }

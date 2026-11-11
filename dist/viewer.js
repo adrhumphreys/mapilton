@@ -129,6 +129,7 @@ function draw(time) {
     button.style.top = py + 'px';
     button.hidden = px < 55 || px > viewportWidth - 55 || py < 116 || py > viewportHeight - 25
       || (viewportWidth < 480 && selection === -1 && (index === 1 || index === 2))
+      || (places[index].hidePinAtCloseZoom && index !== selection && scale < 0.7)
       || (index === selection && places[index].hidePinAtCloseZoom && scale >= 2 && !button.matches(':focus'));
     button.setAttribute('aria-pressed', String(index === selection));
   }
