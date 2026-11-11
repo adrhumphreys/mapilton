@@ -38,3 +38,60 @@ footer { bottom: 22px; left: 22px; padding: 4px 8px; display: flex; gap: 14px; f
   #mini, .hint { display: none; }
   .marker { font-size: 9px; padding: 3px 5px; }
 }
+
+:root { color: #f4eed9; background: #223934; }
+#atlas { background: #a8b37b; }
+.focus {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  backdrop-filter: blur(2.3px);
+  mask-image: linear-gradient(#000 0%, transparent 23%, transparent 77%, #000 100%);
+}
+#atlas::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(180deg, #162e29a8, transparent 27%, transparent 74%, #192e287a);
+  pointer-events: none;
+}
+header, .places, #detail, .tools, footer, #markers, #loading { z-index: 2; }
+header {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  top: 26px;
+  left: 28px;
+  text-shadow: 0 2px 12px #172b25;
+}
+h1 { font-size: clamp(2.5rem, 6vw, 4.65rem); font-weight: 500; letter-spacing: -0.052em; margin: 3px 0; }
+header p { color: #fff3d4; }
+.places, #detail, .zoom, #mini {
+  background: #203830ee;
+  border-color: #e6dfc95c;
+  box-shadow: 0 3px 12px #17292455;
+}
+.places { min-width: 142px; }
+select option { color: #f4eed9; background: #203830; }
+.marker {
+  color: #f4eed9;
+  background: #203830e8;
+  border-color: #efe6c988;
+  box-shadow: 0 3px 10px #17292455;
+  border-radius: 2px;
+  padding: 5px 8px;
+}
+.marker::after { border-top-color: #203830; }
+.marker[aria-pressed="true"], .marker:hover, .zoom button:hover { color: #233c32; background: #f6df9e; }
+.zoom button + button { border-color: #e6dfc94d; }
+footer { background: none; border: 0; box-shadow: none; text-shadow: 0 1px 5px #172924; }
+footer a { color: inherit; text-underline-offset: 2px; }
+#loading { position: absolute; inset: 45% 0 auto; text-align: center; color: #233c32; font-weight: 700; }
+@media (max-width: 640px) {
+  header { top: 16px; left: 15px; }
+  .places { top: 107px; left: 15px; }
+}
+
+@media (max-width: 780px) { .hint { display: none; } }

@@ -10,10 +10,37 @@ const motion = matchMedia('(prefers-reduced-motion: reduce)');
 const scene = document.createElement('canvas');
 scene.width = width;
 scene.height = height;
-paintCity(scene.getContext('2d'));
+const status = document.querySelector('#loading');
+let layers;
+try {
+  const response = await fetch('./hamilton.json');
+  if (!response.ok) throw new Error(`Map data returned HTTP ${response.status}`);
+  layers = paintCity(scene.getContext('2d'), await response.json());
+  status.hidden = true;
+} catch (error) {
+  status.textContent = 'The map could not load. Reload to try again.';
+  throw error;
+}
+const composite = document.createElement('canvas');
+composite.width = width;
+composite.height = height;
+const composed = composite.getContext('2d');
+composed.drawImage(scene, 0, 0);
+composed.drawImage(layers.foreground, 0, 0);
+const miniBase = document.createElement('canvas');
+miniBase.width = mini.width;
+miniBase.height = mini.height;
+const miniPaint = miniBase.getContext('2d');
+const miniScale = Math.min(mini.width / width, mini.height / height);
+const miniInset = (mini.width - width * miniScale) / 2;
+miniPaint.fillStyle = '#1c3331';
+miniPaint.fillRect(0, 0, mini.width, mini.height);
+miniPaint.drawImage(composite, miniInset, 0, width * miniScale, height * miniScale);
+let lastFrame = 0;
 
 let viewportWidth, viewportHeight, ratio, overviewScale;
-let x = width / 2, y = height / 2, scale;
+const startX = width * 0.34;
+let x = startX, y = height / 2, scale;
 let selection = -1;
 let frame;
 const pointers = new Map();
@@ -35,53 +62,66 @@ function resize() {
   canvas.width = Math.round(viewportWidth * ratio);
   canvas.height = Math.round(viewportHeight * ratio);
   const previous = overviewScale;
-  overviewScale = Math.min(viewportWidth / width, viewportHeight / height) * 0.98;
-  scale = previous ? scale * overviewScale / previous : overviewScale;
+  overviewScale = Math.max(viewportWidth / width, viewportHeight / height);
+  scale = previous ? Math.min(4, scale * overviewScale / previous) : overviewScale;
   constrain();
   requestDraw();
 }
 
 function requestDraw() {
-  if (frame === undefined) frame = requestAnimationFrame(draw);
+  if (frame !== undefined) cancelAnimationFrame(frame);
+  frame = requestAnimationFrame(draw);
 }
 
 function draw(time) {
   frame = undefined;
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.fillStyle = '#d1d5a4';
+  context.fillStyle = '#a8b37b';
   context.fillRect(0, 0, viewportWidth, viewportHeight);
   context.translate(viewportWidth / 2 - x * scale, viewportHeight / 2 - y * scale);
   context.scale(scale, scale);
   context.imageSmoothingEnabled = scale < 1;
-  context.drawImage(scene, 0, 0);
-  if (!motion.matches) paintMovement(context, time / 1000);
+  const halfW = viewportWidth / (2 * scale);
+  const halfH = viewportHeight / (2 * scale);
+  const left = Math.max(0, Math.floor(x - halfW));
+  const top = Math.max(0, Math.floor(y - halfH));
+  const right = Math.min(width, Math.ceil(x + halfW));
+  const bottom = Math.min(height, Math.ceil(y + halfH));
+  const bounds = { left, top, right, bottom };
+  const region = [left, top, right - left, bottom - top];
+  const animate = !motion.matches && scale > 0.55;
+  if (animate) {
+    context.drawImage(scene, ...region, ...region);
+    paintMovement(context, layers, time / 1000, bounds);
+    context.drawImage(layers.foreground, ...region, ...region);
+  } else {
+    context.drawImage(composite, ...region, ...region);
+  }
 
   for (const [index, { button, point }] of markers.entries()) {
     const px = (point[0] - x) * scale + viewportWidth / 2;
     const py = (point[1] - y) * scale + viewportHeight / 2;
     button.style.left = px + 'px';
     button.style.top = py + 'px';
-    button.hidden = px < 44 || px > viewportWidth - 44 || py < 32 || py > viewportHeight - 18
+    button.hidden = px < 55 || px > viewportWidth - 55 || py < 116 || py > viewportHeight - 25
       || (viewportWidth < 480 && selection === -1 && (index === 1 || index === 2));
     button.setAttribute('aria-pressed', String(index === selection));
   }
 
-  const factor = Math.min(mini.width / width, mini.height / height);
-  const inset = (mini.width - width * factor) / 2;
-  miniContext.fillStyle = '#d1d5a4';
-  miniContext.fillRect(0, 0, mini.width, mini.height);
-  miniContext.drawImage(scene, inset, 0, width * factor, height * factor);
-  const halfW = viewportWidth / (2 * scale);
-  const halfH = viewportHeight / (2 * scale);
-  const left = Math.max(0, x - halfW);
-  const top = Math.max(0, y - halfH);
-  const right = Math.min(width, x + halfW);
-  const bottom = Math.min(height, y + halfH);
-  miniContext.strokeStyle = '#fff8e7';
-  miniContext.lineWidth = 2;
-  miniContext.strokeRect(inset + left * factor, top * factor + 1,
-    (right - left) * factor, Math.max(0, (bottom - top) * factor - 2));
-  if (!motion.matches) requestDraw();
+  miniContext.drawImage(miniBase, 0, 0);
+  miniContext.strokeStyle = '#fff2bf';
+  miniContext.lineWidth = 1.5;
+  miniContext.strokeRect(miniInset + left * miniScale + 1, top * miniScale + 1,
+    Math.max(0, (right - left) * miniScale - 2), Math.max(0, (bottom - top) * miniScale - 2));
+  if (animate) {
+    lastFrame = time;
+    frame = requestAnimationFrame(tick);
+  }
+}
+
+function tick(time) {
+  if (time - lastFrame < 40) frame = requestAnimationFrame(tick);
+  else draw(time);
 }
 
 function constrain() {
@@ -105,13 +145,13 @@ function choose(index) {
   select.value = index === -1 ? '' : String(index);
   detail.hidden = index === -1;
   if (index === -1) {
-    x = width / 2;
+    x = startX;
     y = height / 2;
     scale = overviewScale;
   } else {
     const place = places[index];
     [x, y] = project(place.x, place.y);
-    scale = Math.min(4, Math.max(overviewScale * 2.5, 1.25));
+    scale = Math.min(4, Math.max(overviewScale * 2.5, 1.65));
     const title = document.createElement('h2');
     const description = document.createElement('p');
     title.textContent = place.name;
