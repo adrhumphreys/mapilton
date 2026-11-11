@@ -74,11 +74,13 @@ def footprints(photo, valid):
     buildings = json.loads((ROOT / 'hamilton.json').read_text())['buildings']
     geometry = []
     keys = []
-    for _, _, _, ring in buildings:
+    for _, _, _, ring, *courtyards in buildings:
         x, y = screen(*np.asarray(ring).T)
         if min(x) >= WIDTH or max(x) <= 0 or min(y) >= HEIGHT or max(y) <= 0:
             continue
-        geometry.append(({'type': 'Polygon', 'coordinates': [list(zip(x, y))]}, len(keys) + 1))
+        holes = courtyards[0] if courtyards else []
+        coordinates = [list(zip(x, y)), *(list(zip(*screen(*np.asarray(hole).T))) for hole in holes)]
+        geometry.append(({'type': 'Polygon', 'coordinates': coordinates}, len(keys) + 1))
         keys.append(','.join(format(v, '.10g') for v in (*ring[0], *ring[1], len(ring))))
     ids = rasterize(geometry, out_shape=valid.shape, dtype='int32')
     roofs = {}

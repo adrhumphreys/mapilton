@@ -47,6 +47,15 @@ def closed_rings(parts):
     return rings
 
 
+def contains(ring, point):
+    x, y = point
+    inside = False
+    for (ax, ay), (bx, by) in zip(ring, ring[1:]):
+        if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+            inside = not inside
+    return inside
+
+
 def area_kind(tags):
     if tags.get('highway') == 'pedestrian' and tags.get('area') == 'yes':
         return 'plaza'
@@ -57,7 +66,7 @@ def area_kind(tags):
     if tags.get('leisure') in ('pitch', 'stadium'):
         return 'pitch'
     if tags.get('amenity') == 'parking':
-        return 'parking'
+        return 'parking' if tags.get('parking', 'surface') == 'surface' else None
     if 'leisure' in tags or 'landuse' in tags:
         return 'grass'
     return None
@@ -96,6 +105,13 @@ def street_detail(tags):
 def convert(snapshot):
     elements = snapshot['elements']
     scene = {key: [] for key in ('areas', 'buildings', 'roads', 'trees', 'streetDetails')}
+    building_members = {
+        member['ref']
+        for element in elements
+        if element['type'] == 'relation' and 'building' in element.get('tags', {})
+        for member in element.get('members', [])
+        if member['type'] == 'way' and member.get('role') in ('outer', 'inner')
+    }
     for element in elements:
         tags = element.get('tags', {})
         kind = element['type']
@@ -108,11 +124,18 @@ def convert(snapshot):
                 scene['streetDetails'].append([feature, *point(element), variant])
             continue
         if kind == 'relation':
-            if area_kind(tags) and tags.get('type') == 'multipolygon':
+            if ('building' in tags or area_kind(tags)) and tags.get('type') == 'multipolygon':
                 members = element.get('members', [])
                 outer = closed_rings([geometry(m) for m in members if m.get('role') == 'outer'])
                 inner = closed_rings([geometry(m) for m in members if m.get('role') == 'inner'])
-                if outer:
+                if 'building' in tags:
+                    for ring in outer:
+                        holes = [hole for hole in inner if contains(ring, hole[0])]
+                        building = [tags['building'], tags.get('height'), tags.get('building:levels'), ring]
+                        if holes:
+                            building.append(holes)
+                        scene['buildings'].append(building)
+                elif outer:
                     scene['areas'].append([area_kind(tags), outer + inner])
             continue
         if kind != 'way':
@@ -121,18 +144,20 @@ def convert(snapshot):
         if len(points) < 2:
             continue
         closed = len(points) >= 4 and points[0] == points[-1]
-        if 'building' in tags and closed:
+        if 'building' in tags and closed and element.get('id') not in building_members:
             scene['buildings'].append([tags['building'], tags.get('height'), tags.get('building:levels'), points])
         elif closed and area_kind(tags):
             scene['areas'].append([area_kind(tags), [points]])
         elif 'highway' in tags or tags.get('railway') == 'rail':
             road = [
                 tags.get('highway', 'rail'), tags.get('bridge', 'no') != 'no',
-                tags.get('tunnel', 'no') != 'no', points,
+                tags.get('tunnel', 'no') != 'no' or tags.get('location') == 'underground', points,
             ]
             count = tags.get('step_count', '')
             if road[0] == 'steps' and count.isdecimal() and 1 <= int(count) <= 200:
                 road.append([int(count), tags.get('handrail') == 'yes'])
+            if tags.get('service') == 'parking_aisle':
+                road.append('parking_aisle')
             scene['roads'].append(road)
     for key in ('areas', 'buildings', 'roads'):
         if not scene[key]:
@@ -162,8 +187,8 @@ def read_osm(tiles):
                 }
             elif element.tag == 'way':
                 refs = [node.attrib['ref'] for node in element.findall('nd')]
-                ways[element.attrib['id']] = {'type': 'way', 'tags': tags, 'refs': refs}
-            elif element.tag == 'relation' and tags.get('type') == 'multipolygon' and area_kind(tags):
+                ways[element.attrib['id']] = {'type': 'way', 'id': element.attrib['id'], 'tags': tags, 'refs': refs}
+            elif element.tag == 'relation' and tags.get('type') == 'multipolygon' and ('building' in tags or area_kind(tags)):
                 relations[element.attrib['id']] = {
                     'type': 'relation', 'tags': tags,
                     'members': [dict(member.attrib) for member in element.findall('member')],

@@ -52,7 +52,7 @@ def hillshade(dem, transform):
 def building_heights(buildings, dem, dsm, transform):
     heights = {}
     seen = set()
-    for _, _, _, ring in buildings:
+    for _, _, _, ring, *courtyards in buildings:
         key = ','.join(format(v, '.10g') for v in (*ring[0], *ring[1], len(ring)))
         if key in seen:
             raise ValueError(f'Duplicate footprint key: {key}')
@@ -65,7 +65,10 @@ def building_heights(buildings, dem, dsm, transform):
         if c1 <= c0 or r1 <= r0:
             continue
         window = Window(c0, r0, c1 - c0, r1 - r0)
-        geometry = {'type': 'Polygon', 'coordinates': [list(zip(e, n))]}
+        holes = courtyards[0] if courtyards else []
+        geometry = {'type': 'Polygon', 'coordinates': [
+            list(zip(e, n)), *(list(zip(*nz_grid(*np.asarray(hole).T))) for hole in holes),
+        ]}
         interior = geometry_mask([geometry], out_shape=(r1-r0, c1-c0),
                                  transform=rasterio.windows.transform(window, transform), invert=True)
         difference = (dsm[r0:r1, c0:c1] - dem[r0:r1, c0:c1])[interior]
@@ -84,8 +87,8 @@ def canopy_points(map_data, dem, dsm, transform):
         x, y = np.asarray(ring).T
         return list(zip(*nz_grid(x, y)))
 
-    polygons = [{'type': 'Polygon', 'coordinates': [coordinates(ring)]}
-                for _, _, _, ring in map_data['buildings']]
+    polygons = [{'type': 'Polygon', 'coordinates': [coordinates(ring), *(coordinates(hole) for hole in (courtyards[0] if courtyards else []))]}
+                for _, _, _, ring, *courtyards in map_data['buildings']]
     polygons.extend({'type': 'Polygon', 'coordinates': [coordinates(ring) for ring in rings]}
                     for kind, rings in map_data['areas'] if kind in ('water', 'parking', 'plaza'))
     blocked = rasterize(polygons, out_shape=dem.shape, transform=transform,

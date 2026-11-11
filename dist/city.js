@@ -106,35 +106,6 @@ function longestEdge(points) {
   }, [points[0], points[1]]);
 }
 
-function paintParking(ctx, shape, ring) {
-  const points = ring.slice(0, -1).map(point => project(...point));
-  const size = Math.abs(area(points));
-  if (size < 240 || size > 18000) return;
-  const [cx, cy] = centre(points);
-  const [[ax, ay], [bx, by]] = longestEdge(points);
-  const heading = Math.atan2(by - ay, bx - ax);
-  const span = Math.min(160, Math.sqrt(size) * 2);
-  const random = randomSource(Math.round(cx * 17 + cy * 137));
-  ctx.save();
-  ctx.clip(shape, 'evenodd');
-  ctx.translate(cx, cy);
-  ctx.rotate(heading);
-  for (let row = -Math.ceil(span / 14) * 14; row < span; row += 14) {
-    for (let col = -span; col < span; col += 3.8) {
-      ctx.fillStyle = '#ece2cc9c';
-      ctx.fillRect(col, row, 0.55, 4.7);
-      if (random() > 0.21) continue;
-      ctx.fillStyle = '#4e5c6165';
-      ctx.fillRect(col + 1.1, row + 0.8, 2.2, 4.1);
-      ctx.fillStyle = ['#e6ddd0', '#667d8d', '#b86b58', '#495e63'][Math.floor(random() * 4)];
-      ctx.fillRect(col + 0.8, row + 0.3, 2.1, 3.8);
-      ctx.fillStyle = '#b1c3c5';
-      ctx.fillRect(col + 1, row + 1, 1.6, 0.65);
-    }
-  }
-  ctx.restore();
-}
-
 function paintLandmarks(ctx, layers) {
   const [lake, seddon, square, , gardens] = places;
   // Find the inner oval from the mapped playing surface.
@@ -244,12 +215,13 @@ function paintBridgeStructure(ctx, route, style) {
   }
 }
 
-function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured, random, roofSample, flatGround, lift, landmark) {
+function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured, random, roofSample, flatGround, lift, landmark, courtyards, elevation) {
   const footprint = path(ground, true);
+  for (const hole of courtyards) path(hole.map(elevation.point), true, footprint);
   const size = Math.abs(area(metres));
   const house = size < 430 && !['industrial', 'commercial', 'retail', 'apartments'].includes(type);
   const fallback = house ? 3.5 + random() * 2.5 : 5 + random() * 7;
-  const pitched = house && ground.length === 4 && size > 48 && (!measured || measured[1] >= 0.9);
+  const pitched = house && !courtyards.length && ground.length === 4 && size > 48 && (!measured || measured[1] >= 0.9);
   const measuredHeight = measured && (pitched ? measured[0] : measured[0] + measured[1] * 0.5);
   const tall = Math.max(1.8, Math.min(95, measuredHeight || parseFloat(taggedHeight)
     || parseFloat(levels) * 3.3 || fallback)) * 0.73;
@@ -267,10 +239,28 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
   const shopfront = !house && size < 2400 && tall < 19;
   const top = flatGround.map(([x, y]) => [x, y - lift - tall]);
   const front = area(ground) > 0 ? 1 : -1;
+  const roofShape = path(top, true);
+  for (const hole of courtyards) {
+    const rim = hole.map(([x, y]) => [x, y - lift - tall]);
+    const floor = hole.map(elevation.point);
+    const winding = area(hole) > 0 ? 1 : -1;
+    for (let i = 0; i < rim.length; i++) {
+      const j = (i + 1) % rim.length;
+      if ((rim[j][0] - rim[i][0]) * winding > 0) {
+        fill(ctx, [rim[i], rim[j], floor[j], floor[i]], '#8f8671');
+      }
+    }
+    path(rim, true, roofShape);
+  }
 
   ctx.fillStyle = '#4e574b35';
-  ctx.fill(footprint);
-  fill(ctx, ground.map(([x, y]) => [x + tall * 0.85, y + tall * 0.39]), '#45574647');
+  ctx.fill(footprint, 'evenodd');
+  const shadow = path(ground.map(([x, y]) => [x + tall * 0.85, y + tall * 0.39]), true);
+  for (const hole of courtyards) {
+    path(hole.map(elevation.point).map(([x, y]) => [x + tall * 0.85, y + tall * 0.39]), true, shadow);
+  }
+  ctx.fillStyle = '#45574647';
+  ctx.fill(shadow, 'evenodd');
 
   for (let i = 0; i < ground.length; i++) {
     const j = (i + 1) % ground.length;
@@ -284,6 +274,11 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
     const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
     const windows = ['cathedral', 'st-peter', 'artspost'].includes(landmark) ? 0 : Math.floor(length / (house ? 5 : 4));
     for (let level = 2; level < tall - 1; level += 2.8) {
+      if (type === 'parking' && length > 5) {
+        const band = [midpoint(a, b, 0.08), midpoint(a, b, 0.92)].map(([x, y]) => [x, y - level]);
+        stroke(ctx, path(band), '#526160', 1);
+        continue;
+      }
       for (let k = 1; k <= windows; k++) {
         const [x, y] = midpoint(a, b, k / (windows + 1));
         ctx.fillStyle = detailRandom() > 0.89 ? '#d8bb7c' : sunny ? '#526a68' : '#415c61';
@@ -300,7 +295,8 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
     }
   }
 
-  fill(ctx, top, roof);
+  ctx.fillStyle = roof;
+  ctx.fill(roofShape, 'evenodd');
   if (pitched) {
     const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
     const [a, b, c, d] = distance(metres[0], metres[1]) < distance(metres[1], metres[2])
@@ -320,8 +316,8 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
     stroke(ctx, path([r1, r2]), trim, 0.8);
   } else {
     ctx.save();
-    ctx.clip(path(top, true));
-    stroke(ctx, path(top, true), light, 2.1);
+    ctx.clip(roofShape, 'evenodd');
+    stroke(ctx, roofShape, light, 2.1);
     const [cx, cy] = centre(top);
     if (size > 250) {
       const span = Math.min(180, Math.sqrt(size) * 1.8);
@@ -419,12 +415,11 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
 
   ctx.fillStyle = '#a8b37b';
   ctx.fillRect(0, 0, width, height);
-  for (const [kind, colour] of [['grass','#a3b97b'], ['wood','#789460'], ['pitch','#8cb26f'], ['parking','#b0aaa0'], ['plaza','#cfc2aa']]) {
+  for (const [kind, colour] of [['grass','#a3b97b'], ['wood','#789460'], ['pitch','#8cb26f'], ['parking','#8b8c83'], ['plaza','#cfc2aa']]) {
     for (const { shape, rings } of areaLayers.get(kind) || []) {
       ctx.fillStyle = colour;
       ctx.fill(shape, 'evenodd');
       stroke(ctx, shape, '#dddcaa72', 1.3);
-      if (kind === 'parking') paintParking(ctx, shape, rings[0]);
       if (kind === 'pitch') {
         const points = rings[0].map(p => project(...p));
         const [cx, cy] = centre(points);
@@ -449,7 +444,7 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
   }
 
   // Houses sit on a mix of pale garden plots and darker yards.
-  const buildings = data.buildings.map(([type, taggedHeight, levels, ring]) => {
+  const buildings = data.buildings.map(([type, taggedHeight, levels, ring, holes = []]) => {
     const metres = ring.slice(0, -1);
     const ground = metres.map(p => project(...p));
     const [cx, cy] = centre(ground);
@@ -466,7 +461,8 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
       ctx.fillStyle = lotRandom() < 0.5 ? '#d2a978' : '#b17d76';
       ctx.fillRect(Math.round(ex), Math.round(ey), 2, 1);
     }
-    return { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample: aerial?.roofs[key], landmark: landmarkBuildings[key] };
+    const courtyards = holes.map(hole => hole.slice(0, -1).map(point => project(...point)));
+    return { ground, metres, type, taggedHeight, levels, measured, cx, cy, courtyards, roofSample: aerial?.roofs[key], landmark: landmarkBuildings[key] };
   });
 
   if (aerial) ctx.drawImage(aerial.ground, 0, 0);
@@ -527,12 +523,13 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
   }
   paintLandmarks(ctx, areaLayers);
 
-  const routes = data.roads.flatMap(([kind, bridge, tunnel, line, steps]) => {
+  const routes = data.roads.flatMap(([kind, bridge, tunnel, line, detail]) => {
     const size = roads[kind] || roads[kind.replace(/_link$/, '')];
     if (!size || tunnel) return [];
     const flat = line.map(p => project(...p));
     const points = elevation.route(flat, bridge);
-    return [{ kind, bridge, size, flat, points, steps, shape: path(bridge ? points : flat) }];
+    return [{ kind, bridge, size, flat, points, steps: Array.isArray(detail) ? detail : undefined,
+      parkingAisle: detail === 'parking_aisle', shape: path(bridge ? points : flat) }];
   }).sort((a, b) => Number(a.bridge) - Number(b.bridge) || a.size - b.size);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -543,10 +540,10 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
       elevation.paintGround(ctx);
       paintSteps(ctx, routes, elevation);
     }
-    const pass = routes.filter(route => route.bridge === bridge);
+    const pass = routes.filter(route => route.bridge === bridge && !(aerial && route.parkingAisle));
     for (const route of pass) {
       if (bridge) stroke(ctx, route.shape, '#33565775', route.size + 7);
-      stroke(ctx, route.shape, bridge ? '#d7caba' : '#ded3b5', route.size + 2.5);
+      if (route.kind !== 'service') stroke(ctx, route.shape, bridge ? '#d7caba' : '#ded3b5', route.size + 2.5);
     }
     for (const { kind, shape, size } of pass) {
       const surface = kind === 'rail' ? '#6d625c' : size < 3 ? '#cfbd92' : '#727e80';
@@ -597,12 +594,12 @@ export function paintCity(ctx, data, lidar, aerial, elevation) {
   }
   const objects = streetFurniture(project, elevation, data.streetDetails ?? []).map(({ y, draw }) => ({ y, draw: () => draw(front) }));
   for (const building of buildings) {
-    const { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample, landmark } = building;
+    const { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample, landmark, courtyards } = building;
     if (cx < -120 || cx > width + 120 || cy < -120 || cy > height + 120) continue;
     const base = ground.map(elevation.point);
     const lift = elevation.lift(cx, cy);
     objects.push({ y: Math.max(...base.map(p => p[1])), draw: () =>
-      paintBuilding(front, base, metres, type, taggedHeight, levels, measured, random, roofSample, ground, lift, landmark) });
+      paintBuilding(front, base, metres, type, taggedHeight, levels, measured, random, roofSample, ground, lift, landmark, courtyards, elevation) });
   }
 
   const canopy = lidar.canopy ?? data.trees.map(([x, y]) => [x, y, 8, 4]);
