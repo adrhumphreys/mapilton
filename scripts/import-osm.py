@@ -77,6 +77,14 @@ def street_detail(tags):
         return 'signal', None
     if highway == 'bus_stop':
         return 'bus', tags.get('shelter') == 'yes'
+    if highway == 'street_lamp':
+        return 'lamp', None
+    if tags.get('amenity') == 'waste_basket':
+        return 'bin', None
+    if tags.get('amenity') == 'drinking_water':
+        return 'fountain', None
+    if tags.get('leisure') == 'picnic_table':
+        return 'picnic', None
     if tags.get('amenity') == 'bench':
         return 'bench', None
     if tags.get('amenity') == 'bicycle_parking' and tags.get('bicycle_parking') in ('stands', 'rack'):

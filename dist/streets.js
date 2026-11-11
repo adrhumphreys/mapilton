@@ -105,5 +105,30 @@ export function streetFurniture(project, elevation, details) {
     ctx.fillStyle = '#3b4740';
     ctx.fillRect(x - 0.55, y - 5, 1.4, 2.8);
   });
+  add('lamp', (ctx, x, y) => {
+    line(ctx, [x, y], [x, y - 6.5], '#525e55', 0.75);
+    line(ctx, [x, y - 6.5], [x + 2, y - 6.9], '#525e55', 0.8);
+    ctx.fillStyle = '#eee0ae';
+    ctx.fillRect(x + 1, y - 7, 1.5, 0.65);
+  });
+  add('bin', (ctx, x, y) => {
+    ctx.fillStyle = '#3e5548';
+    ctx.fillRect(x, y - 2, 1.6, 2);
+    ctx.fillStyle = '#87937d';
+    ctx.fillRect(x - 0.2, y - 2.4, 2, 0.6);
+  });
+  add('picnic', (ctx, x, y) => {
+    polygon(ctx, [[x - 2.5, y], [x + 2, y - 1.4], [x + 3.5, y], [x - 1, y + 1.4]], '#62594778');
+    line(ctx, [x - 1.5, y - 0.8], [x - 1.5, y - 2.2], '#604f3a', 0.7);
+    line(ctx, [x + 2.1, y - 1.6], [x + 2.1, y - 3.1], '#604f3a', 0.7);
+    line(ctx, [x - 2, y - 2.4], [x + 2.4, y - 3.5], '#ac8759', 1.15);
+    line(ctx, [x - 1, y - 0.8], [x + 3, y - 1.8], '#9c774f', 0.8);
+  });
+  add('fountain', (ctx, x, y) => {
+    ctx.fillStyle = '#657d77';
+    ctx.fillRect(x, y - 1.9, 0.9, 1.9);
+    ctx.fillStyle = '#c0c8b4';
+    ctx.fillRect(x - 0.7, y - 2.4, 2.2, 0.75);
+  });
   return objects;
 }

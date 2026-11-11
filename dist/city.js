@@ -15,7 +15,7 @@ export const project = (x, y, z = 0) => [
 
 export const places = [
   { name: 'Lake Rotoroa', lat: -37.798467, lon: 175.274928, viewScale: 1.02, viewOffsetX: 78, text: 'The Lake Domain curves around the shores of Hamilton Lake.' },
-  { name: 'Seddon Park', lat: -37.786877, lon: 175.274529, text: 'Hamilton’s cricket oval sits between Frankton and the central city.' },
+  { name: 'Seddon Park', lat: -37.786877, lon: 175.274529, viewScale: 1.95, text: 'Hamilton’s cricket oval sits between Frankton and the central city.' },
   { name: 'Garden Place', lat: -37.787605, lon: 175.282219, text: 'A pedestrian square linking the city centre to Victoria Street and the river.' },
   { name: 'Claudelands', lat: -37.77951, lon: 175.289567, viewScale: 2.35, hidePinAtCloseZoom: true, text: 'The arena and exhibition halls sit beside Jubilee Bush. The arena’s layered façade takes its cues from the forest canopy.' },
   { name: 'Hamilton Gardens', lat: -37.805214, lon: 175.302265, text: 'Enclosed gardens and open parkland beside a bend in the Waikato River.' },
@@ -27,6 +27,8 @@ export const places = [
   { name: 'Waikato Museum', lat: -37.789748, lon: 175.286535, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'Te Whare Taonga o Waikato Museum & Gallery sits on the riverbank off Grantham Street.' },
   { name: 'Central Library', lat: -37.788180, lon: 175.282633, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'Te Koopuu Maania o Kirikiriroa faces Garden Place with a glazed façade and folded steel canopy.' },
   { name: 'St Peter’s Cathedral', lat: -37.792297, lon: 175.286398, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'The Anglican cathedral and its square bell tower stand on Pukerangiora above Victoria Street.' },
+  { name: 'ArtsPost', lat: -37.789742, lon: 175.285732, viewScale: 3.25, hidePinAtCloseZoom: true, text: 'The former Hamilton Post and Telegraph Office at Victoria and Hood Streets houses ArtsPost.' },
+  { name: 'Gardens Pavilion', lat: -37.806105, lon: 175.302491, viewScale: 2.55, hidePinAtCloseZoom: true, text: 'The pavilion sits near Turtle Lake and the Hamilton Gardens entry precinct.' },
 ].map(place => ({
   ...place,
   x: (place.lon - 175.286) * 87900,
@@ -144,6 +146,17 @@ function paintLandmarks(ctx, layers) {
     const ring = cricket.rings[0];
     const [x, y] = centre(ring);
     const boundary = ring.map(([px, py]) => project(x + (px - x) * 0.96, y + (py - y) * 0.96));
+    // The venue’s grass banks and pale picket fence follow the mapped oval.
+    const perimeter = scale => ring.map(([px, py]) => project(x + (px - x) * scale, y + (py - y) * scale));
+    for (const [scale, colour, thickness] of [[1.12, '#58784858', 6], [1.08, '#9ea76b86', 3.5],
+      [1.045, '#c0be8e95', 1.8]]) {
+      stroke(ctx, path(perimeter(scale), true), colour, thickness);
+    }
+    const fence = path(perimeter(1.025), true);
+    stroke(ctx, fence, '#6f7f5f', 1.55);
+    ctx.setLineDash([1, 1.15]);
+    stroke(ctx, fence, '#e3debf', 1.2);
+    ctx.setLineDash([]);
     stroke(ctx, path(boundary, true), '#e8e4b6', 1.2);
     groundRect(ctx, x - 4, y - 12, 8, 24, '#9b9b5c');
     groundRect(ctx, x - 2, y - 10, 4, 20, '#d3b580');
@@ -287,11 +300,12 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
     const a = ground[i], b = ground[j];
     if ((b[0] - a[0]) * front >= 0) continue;
     const sunny = (b[1] - a[1]) * front > 0;
-    const walls = type === 'industrial' ? ['#c5c9b4', '#899b92']
+    const walls = landmark === 'artspost' ? ['#d8a15e', '#ad7449']
+      : type === 'industrial' ? ['#c5c9b4', '#899b92']
       : house ? ['#e6d3af', '#aa9d8b'] : ['#c8ba9b', '#9f9988'];
     fill(ctx, [top[i], top[j], b, a], walls[sunny ? 0 : 1]);
     const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const windows = landmark === 'cathedral' || landmark === 'st-peter' ? 0 : Math.floor(length / (house ? 5 : 4));
+    const windows = ['cathedral', 'st-peter', 'artspost'].includes(landmark) ? 0 : Math.floor(length / (house ? 5 : 4));
     for (let level = 2; level < tall - 1; level += 2.8) {
       for (let k = 1; k <= windows; k++) {
         const [x, y] = midpoint(a, b, k / (windows + 1));

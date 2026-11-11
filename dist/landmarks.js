@@ -6,6 +6,9 @@ export const landmarkBuildings = {
   '-337.7,-451.6,-314.7,-468.7,13': 'library',
   '304.6,-1311.9,248.7,-1283.6,11': 'arena',
   '20.8,16,19,20,17': 'st-peter',
+  '-38.4,-258.3,-20.3,-233.8,5': 'artspost',
+  '1425.6,1517.5,1455.1,1553.9,16': 'gardens-pavilion',
+  '-1128.1,-645.2,-1129.3,-641,16': 'seddon-pavilion',
 };
 
 function polygon(ctx, points, colour) {
@@ -119,6 +122,65 @@ function paintGlazing(ctx, a, b, height, count, glass, frame) {
 }
 
 function paintCityLandmark(ctx, kind, ground, roof) {
+  if (kind === 'artspost') {
+    // Victoria Street and the short return towards Hood Street.
+    for (const [i, j, bays] of [[0, 1, 6], [1, 2, 3]]) {
+      const a = ground[i], b = ground[j], upperA = roof[i], upperB = roof[j];
+      const baseA = mix(upperA, a, 0.96), baseB = mix(upperB, b, 0.96);
+      polygon(ctx, [upperA, upperB, baseB, baseA], i === 0 ? '#d8a15e' : '#b98451');
+      for (const fraction of [0.08, 0.47, 0.91]) {
+        line(ctx, mix(upperA, baseA, fraction), mix(upperB, baseB, fraction), '#c9c7b6', 1.1);
+      }
+      for (let k = 0; k <= bays; k++) {
+        const lower = mix(baseA, baseB, k / bays), upper = mix(upperA, upperB, k / bays);
+        line(ctx, lower, upper, '#a8ad9e', 0.8);
+        if (k === bays) continue;
+        const sill = mix(baseA, baseB, (k + 0.5) / bays);
+        const top = mix(upperA, upperB, (k + 0.5) / bays);
+        for (const height of [0.22, 0.67]) {
+          const p = mix(sill, top, height);
+          ctx.fillStyle = '#e1d9bb';
+          ctx.fillRect(p[0] - 1.05, p[1] - 1.3, 2.1, 2.2);
+          ctx.fillStyle = '#566c6a';
+          ctx.fillRect(p[0] - 0.58, p[1] - 1.1, 1.16, 1.7);
+        }
+      }
+    }
+    const roofCentre = mix(roof[0], roof[2], 0.44);
+    line(ctx, roofCentre, raise(roofCentre, 5.7), '#dbd8bf', 0.75);
+    polygon(ctx, [raise(roofCentre, 5.7), [roofCentre[0] + 3.4, roofCentre[1] - 5.1],
+      [roofCentre[0] + 3.4, roofCentre[1] - 3.5], raise(roofCentre, 4.2)], '#465f7b');
+    return;
+  }
+  if (kind === 'gardens-pavilion') {
+    const a = ground[14], b = ground[12];
+    paintGlazing(ctx, a, b, 3.2, 11, '#627c73', '#be9870');
+    const veranda = [a, b].map(([x, y]) => [x - 2.4, y + 2.4]);
+    polygon(ctx, [raise(a, 3.8), raise(b, 3.8), raise(veranda[1], 3.8),
+      raise(veranda[0], 3.8)], '#a69f82');
+    line(ctx, raise(veranda[0], 3.7), raise(veranda[1], 3.7), '#5e6255', 1.2);
+    for (const t of [0.03, 0.23, 0.43, 0.63, 0.82, 0.97]) {
+      const p = mix(...veranda, t);
+      line(ctx, p, raise(p, 3.7), '#9b7754', 0.8);
+    }
+    const ridgeA = raise(mix(roof[0], roof[14], 0.53), 1.6);
+    const ridgeB = raise(mix(roof[4], roof[11], 0.48), 2.4);
+    polygon(ctx, [roof[0], roof[1], roof[4], ridgeB, ridgeA], '#777f71');
+    polygon(ctx, [ridgeA, ridgeB, roof[11], roof[12], roof[14]], '#929684');
+    line(ctx, ridgeA, ridgeB, '#c1be9f', 0.75);
+    return;
+  }
+  if (kind === 'seddon-pavilion') {
+    const a = ground[12], b = ground[8];
+    paintGlazing(ctx, a, b, 4.5, 10, '#607677', '#b3b7a1');
+    const edge = [a, b].map(([x, y]) => [x + 3.1, y - 0.7]);
+    polygon(ctx, [raise(a, 5.2), raise(b, 5.2), raise(edge[1], 5.2),
+      raise(edge[0], 5.2)], '#b2b7a6');
+    for (const z of [0.8, 1.55, 2.3]) {
+      line(ctx, raise(edge[0], z), raise(edge[1], z), '#9b9d89', 0.9);
+    }
+    return;
+  }
   if (kind === 'museum') {
     const ridgeA = raise(mix(roof[0], roof[18], 0.55), 3.3);
     const ridgeB = raise(mix(roof[9], roof[10], 0.58), 4.8);
