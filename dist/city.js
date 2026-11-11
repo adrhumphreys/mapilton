@@ -18,6 +18,7 @@ export const places = [
   { name: 'Hamilton Gardens', lat: -37.805214, lon: 175.302265, text: 'Enclosed gardens and open parkland beside a bend in the Waikato River.' },
   { name: 'Victoria Bridge', lat: -37.7913018, lon: 175.2897767, bridge: 'arch', text: 'The 1910 steel deck arch links Hamilton Central and Hamilton East.' },
   { name: 'Claudelands Bridge', lat: -37.7844701, lon: 175.2830619, bridge: 'truss', text: 'The steel truss crosses the Waikato River beside the former railway bridge.' },
+  { name: 'Steele Park', lat: -37.794124, lon: 175.294721, viewScale: 0.98, viewOffsetX: -204, text: 'An open sports field beside Grey Street in Hamilton East.' },
 ].map(place => ({
   ...place,
   x: (place.lon - 175.286) * 87900,
@@ -348,32 +349,46 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
   }
 }
 
-function paintTree(ctx, x, y, radius, variant) {
-  const greens = [
-    ['#365949', '#537b52', '#73965a', '#91a964'],
-    ['#3e6249', '#5f8354', '#83a363', '#a8b973'],
-    ['#315c50', '#447864', '#629270', '#85ae79'],
-  ][variant];
+function paintTree(ctx, x, y, height, radius, seed) {
+  const random = randomSource(seed);
+  const palettes = [
+    ['#294f3a', '#416b41', '#628749', '#91a75b'],
+    ['#31533e', '#547747', '#799252', '#afae63'],
+    ['#294e47', '#3a6c53', '#54896a', '#81a979'],
+    ['#384c32', '#607245', '#7f8e50', '#aab773'],
+  ];
+  const greens = palettes[Math.floor(random() * palettes.length)];
   const r = radius;
-  ctx.fillStyle = '#354d4038';
-  ctx.fillRect(x, y, r * 1.6, r * 0.6);
-  ctx.fillStyle = '#6e6045';
-  ctx.fillRect(x, y - r, 1.4, r);
-  y -= r * 1.3;
-  fill(ctx, [[x-r,y], [x-r,y-r*.55], [x-r*.53,y-r], [x+r*.35,y-r], [x+r,y-r*.38],
-    [x+r,y+r*.36], [x+r*.5,y+r*.7], [x-r*.55,y+r*.65]], greens[0]);
+  const rise = Math.max(r, height * 0.47);
+  const shadowX = x + rise * 0.55;
+  const shadowY = y + rise * 0.28;
+  fill(ctx, [[x - r * 0.6, y], [shadowX - r * 0.55, shadowY - r * 0.45],
+    [shadowX + r * 0.65, shadowY - r * 0.38], [shadowX + r, shadowY],
+    [shadowX + r * 0.52, shadowY + r * 0.48], [shadowX - r * 0.52, shadowY + r * 0.52]],
+    '#314b343e');
+  ctx.fillStyle = '#635b40';
+  ctx.fillRect(x, Math.round(y - rise), 1.3, Math.round(rise));
+  const crownY = y - rise;
+  const silhouette = path(Array.from({ length: 14 }, (_, i) => {
+    const angle = i * Math.PI / 7;
+    const edge = r * (0.8 + random() * 0.31);
+    return [Math.round(x + Math.cos(angle) * edge), Math.round(crownY + Math.sin(angle) * edge * 0.83)];
+  }), true);
+  ctx.fillStyle = greens[0];
+  ctx.fill(silhouette);
+  ctx.save();
+  ctx.clip(silhouette);
   ctx.fillStyle = greens[1];
-  ctx.fillRect(x-r*.78, y-r*.56, r*1.52, r*.86);
-  ctx.fillStyle = greens[2];
-  ctx.fillRect(x-r*.71, y-r*.72, r*1.07, r*.65);
-  ctx.fillRect(x-r*.85, y-r*.25, r*.82, r*.43);
-  ctx.fillStyle = greens[3];
-  ctx.fillRect(x-r*.57, y-r*.77, r*.55, r*.25);
-  ctx.fillRect(x-r*.7, y-r*.34, r*.34, r*.22);
-  for (const [dx, dy] of [[-0.48, -0.56], [-0.1, -0.68], [0.28, -0.34], [-0.58, 0.1]]) {
-    ctx.fillStyle = greens[2 + (Math.round(x + y + dx * 10) & 1)];
-    ctx.fillRect(Math.round(x + r * dx), Math.round(y + r * dy), Math.max(1, Math.round(r * 0.28)), 1);
+  ctx.fillRect(Math.round(x - r), Math.round(crownY - r), r * 2, r * 1.42);
+  for (let i = 0; i < 6 + r * 2; i++) {
+    const dx = random() * 1.8 - 1;
+    const dy = random() * 1.55 - 0.87;
+    const shade = dy + dx * 0.4 < -0.25 ? 2 + Number(random() > 0.7) : 1 + Number(random() > 0.65);
+    ctx.fillStyle = greens[shade];
+    ctx.fillRect(Math.round(x + dx * r), Math.round(crownY + dy * r), 1 + Math.floor(random() * r * 0.5),
+      1 + Math.floor(random() * r * 0.25));
   }
+  ctx.restore();
 }
 
 function makeLayer() {
@@ -476,6 +491,8 @@ export function paintCity(ctx, data, lidar) {
   }
 
   const grassRandom = randomSource(42431);
+  const steele = places.find(place => place.name === 'Steele Park');
+  const [parkX, parkY] = project(steele.x, steele.y);
   for (const { shape, rings } of areaLayers.get('grass') || []) {
     const points = rings[0].map(point => project(...point));
     const [cx, cy] = centre(points);
@@ -483,6 +500,14 @@ export function paintCity(ctx, data, lidar) {
     if (radius < 20) continue;
     ctx.save();
     ctx.clip(shape, 'evenodd');
+    if (radius > 60 && Math.hypot(cx - parkX, cy - parkY) < 35) {
+      for (let i = 0; i < 145; i++) {
+        const x = cx + (grassRandom() - 0.5) * radius * 1.9;
+        const y = cy + (grassRandom() - 0.5) * radius * 1.7;
+        ctx.fillStyle = i % 3 ? '#c5b37318' : '#dbca8a24';
+        ctx.fillRect(Math.round(x), Math.round(y), 4 + i % 22, 3 + i % 10);
+      }
+    }
     for (let i = 0; i < radius * 2.6; i++) {
       const x = Math.round(cx + (grassRandom() - 0.5) * radius * 2.2);
       const y = Math.round(cy + (grassRandom() - 0.5) * radius * 2.2);
@@ -558,58 +583,12 @@ export function paintCity(ctx, data, lidar) {
       paintBuilding(front, ground, metres, type, taggedHeight, levels, measured, random) });
   }
 
-  const addTree = (x, y, radius, source = random) => {
-    if (x < -10 || x > width + 10 || y < -10 || y > height + 15) return;
-    const variant = Math.floor(source() * 3);
-    objects.push({ y, draw: () => paintTree(front, Math.round(x), Math.round(y), radius, variant) });
-  };
-  for (const point of data.trees) addTree(...project(...point), 3 + random() * 4);
-  for (const { shape, rings } of areaLayers.get('wood') || []) {
-    const ring = rings[0].map(p => project(...p));
-    const minX = Math.max(0, Math.min(...ring.map(p => p[0])));
-    const maxX = Math.min(width, Math.max(...ring.map(p => p[0])));
-    const minY = Math.max(0, Math.min(...ring.map(p => p[1])));
-    const maxY = Math.min(height, Math.max(...ring.map(p => p[1])));
-    for (let y = minY; y < maxY; y += 8) {
-      for (let x = minX; x < maxX; x += 9) {
-        const px = x + random() * 9, py = y + random() * 8;
-        if (ctx.isPointInPath(shape, px, py, 'evenodd')) addTree(px, py, 3 + random() * 4.5);
-      }
-    }
-  }
-  for (const { ground, cx, cy, type } of buildings) {
-    if (type === 'industrial' || random() > 0.53) continue;
-    const [gx, gy] = ground[Math.floor(random() * ground.length)];
-    const x = gx + (gx - cx) * 0.45, y = gy + (gy - cy) * 0.5;
-    if (!waterPaths.some(({shape}) => ctx.isPointInPath(shape, x, y, 'evenodd'))) addTree(x, y, 2.2 + random() * 3.7);
-  }
-  const planting = randomSource(53129);
-  for (const { shape, rings } of areaLayers.get('grass') || []) {
-    const outline = rings[0].map(point => project(...point));
-    const size = Math.abs(area(outline));
-    if (size < 1300 || size > 26000) continue;
-    const [cx, cy] = centre(outline);
-    const nearbyBuildings = buildings.filter(building =>
-      Math.abs(building.cx - cx) < 180 && Math.abs(building.cy - cy) < 180)
-      .map(building => path(building.ground, true));
-    const nearbyRoutes = routes.filter(route =>
-      route.points.some(([x, y]) => Math.abs(x - cx) < 180 && Math.abs(y - cy) < 180));
-    for (let i = 1; i < outline.length; i++) {
-      const a = outline[i - 1], b = outline[i];
-      const length = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      for (let offset = 12; offset < length - 8; offset += 19) {
-        if (planting() < 0.33) continue;
-        const edge = midpoint(a, b, offset / length);
-        const [x, y] = midpoint(edge, [cx, cy], 0.14);
-        if (!ctx.isPointInPath(shape, x, y, 'evenodd')
-          || nearbyBuildings.some(footprint => ctx.isPointInPath(footprint, x, y))
-          || nearbyRoutes.some(route => {
-            ctx.lineWidth = route.size + 8;
-            return ctx.isPointInStroke(route.shape, x, y);
-          })) continue;
-        addTree(x, y, 4 + planting() * 3, planting);
-      }
-    }
+  const canopy = lidar.canopy ?? data.trees.map(([x, y]) => [x, y, 8, 4]);
+  for (const [east, south, treeHeight, radius] of canopy) {
+    const [x, y] = project(east, south).map(Math.round);
+    if (x < -20 || x > width + 20 || y < -20 || y > height + 20) continue;
+    const seed = Math.round(east * 199 + south * 523);
+    objects.push({ y, draw: () => paintTree(front, x, y, treeHeight, radius * 1.05, seed) });
   }
   objects.sort((a, b) => a.y - b.y).forEach(object => object.draw());
 
@@ -620,7 +599,7 @@ export function paintCity(ctx, data, lidar) {
   }));
 
   const actors = [];
-  const busyPlaces = places.slice(0, 5).map(place => project(place.x, place.y));
+  const busyPlaces = places.filter(place => !place.bridge).map(place => project(place.x, place.y));
   for (const { kind, size, points } of routes) {
     const walking = ['footway', 'path', 'pedestrian', 'cycleway'].includes(kind);
     const busy = points.some(([x, y]) => busyPlaces.some(([px, py]) =>

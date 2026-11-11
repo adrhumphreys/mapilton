@@ -8,9 +8,10 @@ from pathlib import Path
 import numpy as np
 from pyproj import Transformer
 import rasterio
-from rasterio.features import geometry_mask
+from rasterio.features import geometry_mask, rasterize
 from rasterio.merge import merge
 from rasterio.windows import Window
+from scipy.ndimage import maximum_filter, minimum_filter
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = 'https://nz-elevation.s3.ap-southeast-2.amazonaws.com/waikato/hamilton_2023'
@@ -77,6 +78,50 @@ def building_heights(buildings, dem, dsm, transform):
     return heights
 
 
+def canopy_points(map_data, dem, dsm, transform):
+    """Find probable crowns in elevated returns outside mapped structures."""
+    def coordinates(ring):
+        x, y = np.asarray(ring).T
+        return list(zip(*nz_grid(x, y)))
+
+    polygons = [{'type': 'Polygon', 'coordinates': [coordinates(ring)]}
+                for _, _, _, ring in map_data['buildings']]
+    polygons.extend({'type': 'Polygon', 'coordinates': [coordinates(ring) for ring in rings]}
+                    for kind, rings in map_data['areas'] if kind in ('water', 'parking', 'plaza'))
+    blocked = rasterize(polygons, out_shape=dem.shape, transform=transform,
+                        all_touched=True, dtype='uint8')
+    lines = [{'type': 'LineString', 'coordinates': coordinates(line)}
+             for kind, bridge, tunnel, line in map_data['roads']
+             if not tunnel and kind not in ('path', 'footway', 'cycleway', 'steps')]
+    road_cells = rasterize(lines, out_shape=dem.shape, transform=transform, dtype='uint8')
+    blocked |= maximum_filter(road_cells, size=5)
+    above_ground = dsm - dem
+    above_ground[blocked.astype(bool) | ~np.isfinite(above_ground)] = 0
+    # Require a contiguous patch to reject isolated poles and roof-edge returns.
+    solid = minimum_filter(above_ground, size=3)
+    candidates = (solid > 2.5) & (solid < 34) & (solid == maximum_filter(solid, size=5))
+    rows, cols = np.nonzero(candidates)
+    heights = solid[rows, cols]
+    order = np.argsort(-heights, kind='stable')
+    occupied = np.zeros(dem.shape, dtype=bool)
+    crowns = []
+    for i in order:
+        row, col = rows[i], cols[i]
+        if occupied[row, col]:
+            continue
+        h = float(heights[i])
+        radius = max(3, min(8, round(2 + h * 0.29)))
+        occupied[max(0, row-radius):row+radius+1, max(0, col-radius):col+radius+1] = True
+        crowns.append((col + 0.5, row + 0.5, h, radius))
+    if not crowns:
+        raise ValueError('No probable canopy found in the Hamilton survey')
+    cols, rows, heights, radii = np.asarray(crowns).T
+    e, n = transform * (cols, rows)
+    lon, lat = TRANSFORM.transform(e, n, direction='INVERSE')
+    return np.round(np.column_stack(((lon - 175.286) * 87900, (-37.792 - lat) * 111000,
+                                     heights, radii)), 1).tolist()
+
+
 def main():
     e, n = nz_grid([WEST, WEST, EAST, EAST], [NORTH, SOUTH, NORTH, SOUTH])
     bounds = (int(min(e))-8, int(min(n))-8, int(max(e))+8, int(max(n))+8)
@@ -85,13 +130,15 @@ def main():
     dsm, surface_transform = read_raster('dsm_1m', bounds)
     if dsm.shape != dem.shape or surface_transform != transform:
         raise ValueError('Terrain and surface grids do not match')
-    buildings = json.loads((ROOT / 'dist/hamilton.json').read_text())['buildings']
+    map_data = json.loads((ROOT / 'dist/hamilton.json').read_text())
+    buildings = map_data['buildings']
     heights = building_heights(buildings, dem, dsm, transform)
     if len(heights) < len(buildings) * 0.7:
         raise ValueError(f'Only {len(heights)} buildings have usable LiDAR coverage')
-    result = {'terrain': hillshade(dem, transform), 'buildings': heights}
+    canopy = canopy_points(map_data, dem, dsm, transform)
+    result = {'terrain': hillshade(dem, transform), 'buildings': heights, 'canopy': canopy}
     (ROOT / 'dist/hamilton-lidar.json').write_text(json.dumps(result, separators=(',', ':')) + '\n')
-    print(f'Wrote hillshade and {len(heights)} building estimates')
+    print(f'Wrote hillshade and {len(heights)} building estimates and {len(canopy)} probable crowns')
 
 
 if __name__ == '__main__':
