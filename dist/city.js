@@ -16,6 +16,8 @@ export const places = [
   { name: 'Garden Place', lat: -37.787605, lon: 175.282219, text: 'A pedestrian square linking the city centre to Victoria Street and the river.' },
   { name: 'Claudelands', lat: -37.77951, lon: 175.289567, text: 'The events centre sits next to the old kahikatea stand at Jubilee Bush.' },
   { name: 'Hamilton Gardens', lat: -37.805214, lon: 175.302265, text: 'Enclosed gardens and open parkland beside a bend in the Waikato River.' },
+  { name: 'Victoria Bridge', lat: -37.7913018, lon: 175.2897767, bridge: 'arch', text: 'The 1910 steel deck arch links Hamilton Central and Hamilton East.' },
+  { name: 'Claudelands Bridge', lat: -37.7844701, lon: 175.2830619, bridge: 'truss', text: 'The steel truss crosses the Waikato River beside the former railway bridge.' },
 ].map(place => ({
   ...place,
   x: (place.lon - 175.286) * 87900,
@@ -183,12 +185,75 @@ function paintLandmarks(ctx, layers) {
   }
 }
 
-function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, random) {
+function paintRelief(ctx, terrain) {
+  const grid = document.createElement('canvas');
+  grid.width = terrain.width;
+  grid.height = terrain.height;
+  const pixels = grid.getContext('2d');
+  const image = pixels.createImageData(grid.width, grid.height);
+  const shade = atob(terrain.shade);
+  for (let i = 0; i < shade.length; i++) {
+    const relief = shade.charCodeAt(i) - 128;
+    const offset = i * 4;
+    image.data[offset] = relief > 0 ? 244 : 43;
+    image.data[offset + 1] = relief > 0 ? 228 : 72;
+    image.data[offset + 2] = relief > 0 ? 169 : 61;
+    image.data[offset + 3] = Math.abs(relief) * 1.35;
+  }
+  pixels.putImageData(image, 0, 0);
+  const [x, y] = project(terrain.x, terrain.y);
+  ctx.save();
+  ctx.transform(cos * terrain.step, -pitch * sin * terrain.step,
+    sin * terrain.step, pitch * cos * terrain.step, x, y);
+  ctx.drawImage(grid, -0.5, -0.5);
+  ctx.restore();
+}
+
+function paintBridgeStructure(ctx, route, style) {
+  const a = route.points[0], b = route.points.at(-1);
+  const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (length < 45) return;
+  const sideX = -(b[1] - a[1]) / length * route.size * 0.5;
+  const sideY = (b[0] - a[0]) / length * route.size * 0.5;
+  function point(t, side, raise = 0) {
+    const [x, y] = midpoint(a, b, t);
+    return [x + sideX * side, y + sideY * side - raise];
+  }
+  if (style === 'arch') {
+    const nearSide = Math.sign(sideY);
+    const arch = Array.from({ length: 25 }, (_, i) => {
+      const t = i / 24;
+      return point(0.15 + t * 0.7, nearSide, -22 + 20 * 4 * t * (1 - t));
+    });
+    for (let i = 0; i < arch.length; i += 3) {
+      stroke(ctx, path([arch[i], point(0.15 + i / 24 * 0.7, nearSide)]), '#526a68', 1.1);
+    }
+    stroke(ctx, path(arch), '#456463', 2.3);
+    stroke(ctx, path(arch.map(([x, y]) => [x, y - 0.7])), '#82958a', 0.8);
+  } else {
+    const nearSide = Math.sign(sideY);
+    for (const t of [0.27, 0.53, 0.78]) {
+      stroke(ctx, path([point(t, nearSide, -1), point(t, nearSide, -15)]), '#8c9182', 3.4);
+    }
+    const lower = [];
+    for (let i = 0; i <= 14; i++) {
+      const t = 0.04 + i / 14 * 0.92;
+      lower.push(point(t, nearSide, -5.2));
+      if (i > 0) stroke(ctx, path([point(t, nearSide, -0.6), lower[i - 1]]), '#546a65', 1.1);
+    }
+    stroke(ctx, path(lower), '#485e5c', 1.35);
+  }
+}
+
+function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured, random) {
   const footprint = path(ground, true);
   const size = Math.abs(area(metres));
   const house = size < 430 && !['industrial', 'commercial', 'retail', 'apartments'].includes(type);
-  const tall = Math.max(2.4, Math.min(85, parseFloat(taggedHeight)
-    || parseFloat(levels) * 3.3 || (house ? 3.5 + random() * 2.5 : 5 + random() * 7))) * 0.73;
+  const fallback = house ? 3.5 + random() * 2.5 : 5 + random() * 7;
+  const pitched = house && ground.length === 4 && size > 48 && (!measured || measured[1] >= 0.9);
+  const measuredHeight = measured && (pitched ? measured[0] : measured[0] + measured[1] * 0.5);
+  const tall = Math.max(1.8, Math.min(95, measuredHeight || parseFloat(taggedHeight)
+    || parseFloat(levels) * 3.3 || fallback)) * 0.73;
   const [roof, light, dark, trim] = palettes[Math.floor(random() * palettes.length)];
   const detailRandom = randomSource(Math.round(ground[0][0] * 433 + ground[0][1] * 313));
   const shopfront = !house && size < 2400 && tall < 19;
@@ -227,12 +292,12 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, random) 
   }
 
   fill(ctx, top, roof);
-  if (ground.length === 4 && house && size > 48) {
+  if (pitched) {
     const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
     const [a, b, c, d] = distance(metres[0], metres[1]) < distance(metres[1], metres[2])
       ? top : [top[1], top[2], top[3], top[0]];
     const r1 = midpoint(a, b, 0.5), r2 = midpoint(d, c, 0.5);
-    const ridge = Math.min(4.5, Math.max(1.6, Math.sqrt(size) * 0.16));
+    const ridge = measured ? Math.min(5, measured[1] * 0.73) : Math.min(4.5, Math.max(1.6, Math.sqrt(size) * 0.16));
     r1[1] -= ridge;
     r2[1] -= ridge;
     fill(ctx, [a, r1, r2, d], light);
@@ -318,7 +383,7 @@ function makeLayer() {
   return layer;
 }
 
-export function paintCity(ctx, data) {
+export function paintCity(ctx, data, lidar) {
   const random = randomSource(76291);
   const areaLayers = new Map();
   for (const [kind, rings] of data.areas) {
@@ -367,24 +432,22 @@ export function paintCity(ctx, data) {
     const yard = ground.map(([x, y]) => [x + (x - cx) * 0.4 + 1, y + (y - cy) * 0.55]);
     fill(ctx, yard, type === 'commercial' || type === 'industrial' ? '#bcb4a1'
       : ['#b6ba8e','#a2aa77','#b2b17e','#bec097'][Math.floor(random() * 4)]);
-    return { ground, metres, type, taggedHeight, levels, cx, cy };
+    const key = [...ring[0], ...ring[1], ring.length].join(',');
+    const measured = lidar.buildings[key];
+    return { ground, metres, type, taggedHeight, levels, measured, cx, cy };
   });
 
+  paintRelief(ctx, lidar.terrain);
+
   const waterPaths = areaLayers.get('water') || [];
-  for (const { shape } of waterPaths) {
-    stroke(ctx, shape, '#78956c', 6);
-    const colour = ctx.createLinearGradient(0, 0, width, height);
-    colour.addColorStop(0, '#407f85');
-    colour.addColorStop(0.48, '#327780');
-    colour.addColorStop(1, '#4c9394');
-    ctx.fillStyle = colour;
-    ctx.fill(shape, 'evenodd');
-    ctx.save();
-    ctx.clip(shape, 'evenodd');
-    stroke(ctx, shape, '#568c87', 10);
-    stroke(ctx, shape, '#71a092', 3);
-    ctx.restore();
-  }
+  // Paint every shoreline first so adjacent water polygons cover their shared edges.
+  for (const { shape } of waterPaths) stroke(ctx, shape, '#78956c', 5);
+  const waterColour = ctx.createLinearGradient(0, 0, width, height);
+  waterColour.addColorStop(0, '#407f85');
+  waterColour.addColorStop(0.48, '#327780');
+  waterColour.addColorStop(1, '#4c9394');
+  ctx.fillStyle = waterColour;
+  for (const { shape } of waterPaths) ctx.fill(shape, 'evenodd');
   const ripples = [];
   for (const { shape, rings } of waterPaths) {
     const points = rings.flat().map(p => project(...p));
@@ -454,12 +517,21 @@ export function paintCity(ctx, data) {
 
   const foreground = makeLayer();
   const front = foreground.getContext('2d');
+  for (const place of places.filter(place => place.bridge)) {
+    const target = project(place.x, place.y);
+    const crossing = routes.find(route => {
+      if (!route.bridge || route.size < 6) return false;
+      const mid = midpoint(route.points[0], route.points.at(-1), 0.5);
+      return Math.hypot(mid[0] - target[0], mid[1] - target[1]) < 5;
+    });
+    if (crossing) paintBridgeStructure(ctx, crossing, place.bridge);
+  }
   const objects = [];
   for (const building of buildings) {
-    const { ground, metres, type, taggedHeight, levels, cx, cy } = building;
+    const { ground, metres, type, taggedHeight, levels, measured, cx, cy } = building;
     if (cx < -120 || cx > width + 120 || cy < -120 || cy > height + 120) continue;
     objects.push({ y: Math.max(...ground.map(p => p[1])), draw: () =>
-      paintBuilding(front, ground, metres, type, taggedHeight, levels, random) });
+      paintBuilding(front, ground, metres, type, taggedHeight, levels, measured, random) });
   }
 
   const addTree = (x, y, radius) => {

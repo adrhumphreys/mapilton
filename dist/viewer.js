@@ -13,9 +13,12 @@ scene.height = height;
 const status = document.querySelector('#loading');
 let layers;
 try {
-  const response = await fetch('./hamilton.json');
-  if (!response.ok) throw new Error(`Map data returned HTTP ${response.status}`);
-  layers = paintCity(scene.getContext('2d'), await response.json());
+  const [map, lidar] = await Promise.all(['hamilton.json', 'hamilton-lidar.json'].map(async file => {
+    const response = await fetch(file);
+    if (!response.ok) throw new Error(`${file} returned HTTP ${response.status}`);
+    return response.json();
+  }));
+  layers = paintCity(scene.getContext('2d'), map, lidar);
   status.hidden = true;
 } catch (error) {
   status.textContent = 'The map could not load. Reload to try again.';
