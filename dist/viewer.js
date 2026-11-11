@@ -11,13 +11,15 @@ const scene = document.createElement('canvas');
 scene.width = width;
 scene.height = height;
 const status = document.querySelector('#loading');
-let layers;
+async function loadJson(file) {
+  const response = await fetch(file);
+  if (!response.ok) throw new Error(`${file} returned HTTP ${response.status}`);
+  return response.json();
+}
+
+let map, lidar, layers;
 try {
-  const [map, lidar] = await Promise.all(['hamilton.json', 'hamilton-lidar.json'].map(async file => {
-    const response = await fetch(file);
-    if (!response.ok) throw new Error(`${file} returned HTTP ${response.status}`);
-    return response.json();
-  }));
+  [map, lidar] = await Promise.all(['hamilton.json', 'hamilton-lidar.json'].map(loadJson));
   layers = paintCity(scene.getContext('2d'), map, lidar);
   status.hidden = true;
 } catch (error) {
@@ -28,20 +30,23 @@ const composite = document.createElement('canvas');
 composite.width = width;
 composite.height = height;
 const composed = composite.getContext('2d');
-composed.drawImage(scene, 0, 0);
 const mapBounds = { left: 0, top: 0, right: width, bottom: height };
-paintMovement(composed, layers, 0, mapBounds);
-composed.drawImage(layers.foreground, 0, 0);
-paintBirds(composed, layers.birds, 0, mapBounds);
 const miniBase = document.createElement('canvas');
 miniBase.width = mini.width;
 miniBase.height = mini.height;
 const miniPaint = miniBase.getContext('2d');
 const miniScale = Math.min(mini.width / width, mini.height / height);
 const miniInset = (mini.width - width * miniScale) / 2;
-miniPaint.fillStyle = '#1c3331';
-miniPaint.fillRect(0, 0, mini.width, mini.height);
-miniPaint.drawImage(composite, miniInset, 0, width * miniScale, height * miniScale);
+function updateOverview() {
+  composed.drawImage(scene, 0, 0);
+  paintMovement(composed, layers, 0, mapBounds);
+  composed.drawImage(layers.foreground, 0, 0);
+  paintBirds(composed, layers.birds, 0, mapBounds);
+  miniPaint.fillStyle = '#1c3331';
+  miniPaint.fillRect(0, 0, mini.width, mini.height);
+  miniPaint.drawImage(composite, miniInset, 0, width * miniScale, height * miniScale);
+}
+updateOverview();
 let lastFrame = 0;
 
 let viewportWidth, viewportHeight, ratio, overviewScale;
@@ -169,6 +174,42 @@ function choose(index) {
   constrain();
   requestDraw();
 }
+
+const aerialButton = document.querySelector('#aerial');
+const aerialStatus = document.querySelector('#aerial-status');
+const aerialCredit = document.querySelector('#aerial-credit');
+let aerial;
+aerialButton.disabled = false;
+aerialButton.addEventListener('click', async () => {
+  const enabled = aerialButton.getAttribute('aria-pressed') === 'false';
+  aerialButton.disabled = true;
+  aerialStatus.textContent = 'Updating map…';
+  try {
+    if (enabled && !aerial) {
+      const image = new Image();
+      image.src = './hamilton-east-ground.png';
+      const [metadata] = await Promise.all([loadJson('hamilton-east-aerial.json'), image.decode()]);
+      aerial = { ...metadata, image };
+    }
+    // Let the status render before the canvas work begins.
+    await new Promise(resolve => setTimeout(resolve, 30));
+    layers = paintCity(scene.getContext('2d'), map, lidar, enabled ? aerial : undefined);
+    updateOverview();
+    aerialButton.setAttribute('aria-pressed', String(enabled));
+    aerialCredit.hidden = !enabled;
+    if (enabled && (x < aerial.left || x > aerial.left + aerial.image.width
+      || y < aerial.top || y > aerial.top + aerial.image.height || scale < 0.65)) {
+      choose(places.findIndex(place => place.name === 'Steele Park'));
+    }
+    requestDraw();
+    aerialStatus.textContent = '';
+  } catch (error) {
+    console.error(error);
+    aerialStatus.textContent = 'Aerial detail could not load.';
+  } finally {
+    aerialButton.disabled = false;
+  }
+});
 
 select.addEventListener('change', () => choose(select.value === '' ? -1 : Number(select.value)));
 document.querySelector('#in').addEventListener('click', () => zoom(1.35));

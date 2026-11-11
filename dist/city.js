@@ -246,7 +246,7 @@ function paintBridgeStructure(ctx, route, style) {
   }
 }
 
-function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured, random) {
+function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured, random, roofSample) {
   const footprint = path(ground, true);
   const size = Math.abs(area(metres));
   const house = size < 430 && !['industrial', 'commercial', 'retail', 'apartments'].includes(type);
@@ -255,7 +255,16 @@ function paintBuilding(ctx, ground, metres, type, taggedHeight, levels, measured
   const measuredHeight = measured && (pitched ? measured[0] : measured[0] + measured[1] * 0.5);
   const tall = Math.max(1.8, Math.min(95, measuredHeight || parseFloat(taggedHeight)
     || parseFloat(levels) * 3.3 || fallback)) * 0.73;
-  const [roof, light, dark, trim] = palettes[Math.floor(random() * palettes.length)];
+  const palette = palettes[Math.floor(random() * palettes.length)];
+  const [roof, light, dark, trim] = roofSample
+    ? [0, 0.17, -0.2, 0.31].map(amount => {
+      const channels = [1, 3, 5].map(offset => {
+        const value = parseInt(roofSample.slice(offset, offset + 2), 16);
+        return Math.round(amount > 0 ? value + (255 - value) * amount : value * (1 + amount));
+      });
+      return 'rgb(' + channels.join(',') + ')';
+    })
+    : palette;
   const detailRandom = randomSource(Math.round(ground[0][0] * 433 + ground[0][1] * 313));
   const shopfront = !house && size < 2400 && tall < 19;
   const top = ground.map(([x, y]) => [x, y - tall]);
@@ -398,7 +407,7 @@ function makeLayer() {
   return layer;
 }
 
-export function paintCity(ctx, data, lidar) {
+export function paintCity(ctx, data, lidar, aerial) {
   const random = randomSource(76291);
   const areaLayers = new Map();
   for (const [kind, rings] of data.areas) {
@@ -457,10 +466,11 @@ export function paintCity(ctx, data, lidar) {
       ctx.fillStyle = lotRandom() < 0.5 ? '#d2a978' : '#b17d76';
       ctx.fillRect(Math.round(ex), Math.round(ey), 2, 1);
     }
-    return { ground, metres, type, taggedHeight, levels, measured, cx, cy };
+    return { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample: aerial?.roofs[key] };
   });
 
   paintRelief(ctx, lidar.terrain);
+  if (aerial) ctx.drawImage(aerial.image, aerial.left, aerial.top);
 
   const waterPaths = areaLayers.get('water') || [];
   // Paint every shoreline first so adjacent water polygons cover their shared edges.
@@ -577,10 +587,10 @@ export function paintCity(ctx, data, lidar) {
   }
   const objects = [];
   for (const building of buildings) {
-    const { ground, metres, type, taggedHeight, levels, measured, cx, cy } = building;
+    const { ground, metres, type, taggedHeight, levels, measured, cx, cy, roofSample } = building;
     if (cx < -120 || cx > width + 120 || cy < -120 || cy > height + 120) continue;
     objects.push({ y: Math.max(...ground.map(p => p[1])), draw: () =>
-      paintBuilding(front, ground, metres, type, taggedHeight, levels, measured, random) });
+      paintBuilding(front, ground, metres, type, taggedHeight, levels, measured, random, roofSample) });
   }
 
   const canopy = lidar.canopy ?? data.trees.map(([x, y]) => [x, y, 8, 4]);

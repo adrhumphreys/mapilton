@@ -95,3 +95,17 @@ footer a { color: inherit; text-underline-offset: 2px; }
 }
 
 @media (max-width: 780px) { .hint { display: none; } }
+
+#aerial {
+  background: transparent;
+  border: 1px solid #e6dfc95c;
+  padding: 6px 7px;
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+}
+#aerial[aria-pressed="true"] { background: #f6df9e; color: #233c32; }
+#aerial-status:empty { display: none; }
+#aerial-status { font-size: 0.7rem; }
+footer { flex-wrap: wrap; gap: 4px 12px; max-width: calc(100% - 80px); }
+#atlas:has(#aerial[aria-pressed="true"]) .hint { display: none; }
