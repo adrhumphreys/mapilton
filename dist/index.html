@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore a pixel-art miniature of Hamilton, New Zealand.">
+  <title>Pixel Hamilton</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="atlas" aria-label="Pixel Hamilton">
+    <canvas id="map" tabindex="0" aria-label="Illustrated map. Use arrow keys to pan and plus or minus to zoom."></canvas>
+    <div id="markers" aria-label="Map landmarks"></div>
+    <header>
+      <p class="eyebrow">KIRIKIRIROA / AOTEAROA</p>
+      <h1>Pixel Hamilton</h1>
+      <p>A miniature city on the Waikato River.</p>
+    </header>
+    <aside class="places" aria-label="Explore landmarks">
+      <label for="places">Explore</label>
+      <select id="places"><option value="">City overview</option></select>
+    </aside>
+    <section id="detail" hidden aria-live="polite"></section>
+    <div class="tools">
+      <div class="zoom" aria-label="Map controls">
+        <button id="out" aria-label="Zoom out">−</button>
+        <button id="in" aria-label="Zoom in">+</button>
+        <button id="home" aria-label="Reset view">⌂</button>
+      </div>
+      <canvas id="mini" width="176" height="104" aria-hidden="true"></canvas>
+    </div>
+    <footer><span>Illustrated geography</span><span class="hint">Drag to pan · Scroll or pinch to zoom</span></footer>
+  </main>
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>
