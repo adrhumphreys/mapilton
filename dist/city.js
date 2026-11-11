@@ -470,7 +470,7 @@ export function paintCity(ctx, data, lidar, aerial) {
   });
 
   paintRelief(ctx, lidar.terrain);
-  if (aerial) ctx.drawImage(aerial.image, aerial.left, aerial.top);
+  if (aerial) ctx.drawImage(aerial.ground, 0, 0);
 
   const waterPaths = areaLayers.get('water') || [];
   // Paint every shoreline first so adjacent water polygons cover their shared edges.

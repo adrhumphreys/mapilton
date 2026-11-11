@@ -26,8 +26,8 @@ To rebuild the data file, run `python3 scripts/import-osm.py`. The importer fetc
 
 To regenerate the LiDAR derivatives, install `numpy`, `pyproj`, `rasterio`, and `scipy` in a Python virtual environment, then run `python scripts/import-lidar.py` after importing OpenStreetMap. The script reads the public LINZ GeoTIFFs and writes the bundled `dist/hamilton-lidar.json`.
 
-## Hamilton East aerial comparison
+## Aerial detail
 
-Turn on **Hamilton East aerial detail** to see the comparison area from Victoria Bridge to Steele Park. Turn it off at the same zoom to compare the illustrated ground and roof palette. The comparison uses sampled roof colours and a simplified ground texture derived from the [Hamilton 0.05 m Urban Aerial Photos (2024–2025)](https://data.linz.govt.nz/layer/123014-hamilton-005m-urban-aerial-photos-2024-2025/), captured for Hamilton City Council and distributed by Toitū Te Whenua LINZ under CC BY 4.0.
+The map uses sampled roof colours and simplified ground texture derived from the [Hamilton 0.05 m Urban Aerial Photos (2024–2025)](https://data.linz.govt.nz/layer/123014-hamilton-005m-urban-aerial-photos-2024-2025/), captured for Hamilton City Council and distributed by Toitū Te Whenua LINZ under CC BY 4.0. Small roofs with insufficient imagery samples use the illustrated palette.
 
-To regenerate the comparison assets, use the same Python environment as the LiDAR importer and run `python scripts/import-aerial.py`. It reads the public survey tiles, projects their colours into the map camera, and writes the ground PNG and roof colour table.
+To regenerate the aerial assets, use the same Python environment as the LiDAR importer and run `python scripts/import-aerial.py`. It reads the public survey tiles, projects their colours into the map camera, and writes the ground WebP and roof colour table.
