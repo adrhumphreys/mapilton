@@ -2,7 +2,6 @@
 
 from base64 import b64encode
 from contextlib import ExitStack
-import json
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +12,7 @@ from rasterio.merge import merge
 from rasterio.windows import Window
 from scipy.ndimage import maximum_filter, minimum_filter
 
+from data_files import read_json, write_json
 from map_extent import WIDTH, HEIGHT, footprint_key, ground, screen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -143,14 +143,14 @@ def main():
     dsm, surface_transform = read_raster('dsm_1m', bounds)
     if dsm.shape != dem.shape or surface_transform != transform:
         raise ValueError('Terrain and surface grids do not match')
-    map_data = json.loads((ROOT / 'dist/hamilton.json').read_text())
+    map_data = read_json(ROOT / 'dist/hamilton.json.gz')
     buildings = map_data['buildings']
     heights = building_heights(buildings, dem, dsm, transform)
     if len(heights) < len(buildings) * 0.7:
         raise ValueError(f'Only {len(heights)} buildings have usable LiDAR coverage')
     canopy = canopy_points(map_data, dem, dsm, transform)
     result = {'terrain': hillshade(dem, transform), 'buildings': heights, 'canopy': canopy}
-    (ROOT / 'dist/hamilton-lidar.json').write_text(json.dumps(result, separators=(',', ':')) + '\n')
+    write_json(ROOT / 'dist/hamilton-lidar.json.gz', result)
     print(f'Wrote hillshade and {len(heights)} building estimates and {len(canopy)} probable crowns')
 
 

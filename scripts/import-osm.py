@@ -1,14 +1,14 @@
 """Convert OpenStreetMap extracts into the atlas's compact scene data."""
 
 import argparse
-import json
 from pathlib import Path
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
+from data_files import write_json
 from map_extent import in_scene
 
-OUTPUT = Path(__file__).resolve().parents[1] / 'dist' / 'hamilton.json'
+OUTPUT = Path(__file__).resolve().parents[1] / 'dist' / 'hamilton.json.gz'
 ENDPOINT = 'https://api.openstreetmap.org/api/0.6/map'
 
 
@@ -224,7 +224,7 @@ def main():
     args = parser.parse_args()
     tiles = (ElementTree.parse(file).getroot() for file in args.tiles) if args.tiles else fetch_tiles()
     scene = convert(read_osm(tiles))
-    OUTPUT.write_text(json.dumps(scene, separators=(',', ':')) + '\n')
+    write_json(OUTPUT, scene)
     print(', '.join(f'{len(value)} {key}' for key, value in scene.items()))
 
 

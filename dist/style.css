@@ -53,7 +53,7 @@ footer { bottom: 22px; left: 22px; padding: 4px 8px; display: flex; gap: 14px; f
   position: absolute;
   z-index: 1;
   inset: 0;
-  background: linear-gradient(180deg, #162e29a8, transparent 27%, transparent 74%, #192e287a);
+  background: linear-gradient(180deg, #162e2980, transparent 24%, transparent 78%, #192e2850);
   pointer-events: none;
 }
 header, .places, #detail, .tools, footer, #markers, #loading { z-index: 2; }
@@ -68,6 +68,8 @@ header {
 }
 h1 { font-size: clamp(2.5rem, 6vw, 4.65rem); font-weight: 500; letter-spacing: -0.052em; margin: 3px 0; }
 header p { color: #fff3d4; }
+.sky { margin-top: 6px; font-size: 0.86rem; letter-spacing: 0.02em; opacity: 0.92; font-variant-numeric: tabular-nums; }
+.sky:empty { display: none; }
 .places, #detail, .zoom, #mini {
   background: #203830ee;
   border-color: #e6dfc95c;
@@ -97,3 +99,60 @@ footer a { color: inherit; text-underline-offset: 2px; }
 @media (max-width: 960px) { .hint { display: none; } }
 
 footer { flex-wrap: wrap; gap: 4px 12px; max-width: calc(100% - 80px); }
+
+.places-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.find-bus {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px; border: 1px solid #e6dfc96e; border-radius: 2px;
+  background: transparent; font: 700 0.64rem ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.find-bus:hover, .find-bus[aria-pressed="true"] { color: #233c32; background: #f6df9e; }
+#buses {
+  width: min(420px, calc(100vw - 32px)); max-height: min(560px, calc(100dvh - 48px)); padding: 0;
+  color: #f4eed9; background: #203830; border: 1px solid #e6dfc95c; box-shadow: 0 10px 40px #0b1612aa;
+  display: none; flex-direction: column;
+}
+#buses[open] { display: flex; }
+#buses::backdrop { background: #0d1a1666; backdrop-filter: blur(2px); }
+.dialog-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 8px; }
+.dialog-head h2 { margin: 0; font: 600 1.15rem Georgia, serif; }
+.dialog-head button { border: 0; background: transparent; font-size: 1.4rem; line-height: 1; padding: 0 4px; }
+#bus-search {
+  margin: 0 16px 10px; padding: 8px 10px; font: inherit; font-size: 0.85rem; color: inherit;
+  background: #172b25; border: 1px solid #e6dfc94d; border-radius: 2px;
+}
+#bus-search::placeholder { color: #f4eed98a; }
+.bus-list { list-style: none; margin: 0; padding: 0 8px 10px; overflow-y: auto; }
+.bus-list button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; text-align: left;
+  border: 0; border-radius: 2px; background: transparent; font: inherit;
+}
+.bus-list button:hover, .bus-list button:focus-visible { background: #2d4a40; }
+.route-badge {
+  flex: none; min-width: 34px; padding: 3px 5px; text-align: center; border-radius: 2px;
+  font: 700 0.75rem ui-monospace, monospace;
+}
+.bus-what { display: grid; gap: 2px; min-width: 0; }
+.bus-what strong { font-size: 0.86rem; font-weight: 600; }
+.bus-what span { font-size: 0.75rem; opacity: 0.78; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bus-empty { margin: 4px 16px 18px; font-size: 0.85rem; opacity: 0.8; }
+#detail .tracking-title { display: flex; align-items: center; gap: 8px; }
+#detail .tracking-next { margin-top: 6px; font-variant-numeric: tabular-nums; }
+#detail .stop-tracking {
+  margin-top: 10px; padding: 5px 10px; border: 1px solid #e6dfc96e; border-radius: 2px; background: transparent;
+  font: 700 0.68rem ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase;
+}
+#detail .stop-tracking:hover { color: #233c32; background: #f6df9e; }
+
+#zen { display: grid; place-items: center; }
+#atlas header, #atlas .places, #atlas #detail, #atlas footer, #atlas #markers, #atlas #mini, #atlas .zoom {
+  transition: opacity 0.35s ease, visibility 0.35s;
+}
+#atlas.zen header, #atlas.zen .places, #atlas.zen #detail, #atlas.zen footer, #atlas.zen #markers, #atlas.zen #mini {
+  opacity: 0; visibility: hidden; pointer-events: none;
+}
+#atlas.zen .zoom button:not(#zen) { display: none; }
+#atlas.zen .zoom { opacity: 0.35; background: #203830aa; box-shadow: none; }
+#atlas.zen .zoom:hover, #atlas.zen .zoom:focus-within { opacity: 1; }
+#atlas.zen #zen { border-top: 0; }
+#atlas::before { transition: opacity 0.35s ease; }
+#atlas.zen::before { opacity: 0; }

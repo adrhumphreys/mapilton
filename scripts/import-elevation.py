@@ -1,7 +1,6 @@
 """Sample the full Hamilton terrain in the map's orthographic ground coordinates."""
 
 from base64 import b64encode
-import json
 from pathlib import Path
 from runpy import run_path
 
@@ -10,6 +9,7 @@ from rasterio.features import rasterize
 from rasterio.transform import Affine
 from scipy.ndimage import binary_erosion, distance_transform_edt, gaussian_filter, label
 
+from data_files import read_json, write_json
 from map_extent import WIDTH, HEIGHT, ground, screen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,7 +36,7 @@ def main():
         samples = samples[tuple(nearest)]
     samples = gaussian_filter(samples, sigma=0.7)
     water = []
-    data = json.loads((ROOT / 'dist/hamilton.json').read_text())
+    data = read_json(ROOT / 'dist/hamilton.json.gz')
     for kind, rings in data['areas']:
         if kind != 'water':
             continue
@@ -55,10 +55,13 @@ def main():
         samples[surface] = np.median(samples[core if core.any() else surface])
     reference = 35
     encoded = np.rint((samples - reference) * 10).astype('<i2')
+    deltas = encoded.copy()
+    deltas[:, 1:] = np.diff(encoded, axis=1)
+    deltas[1:, 0] = np.diff(encoded[:, 0])
     result = {'left': 0, 'top': 0, 'width': x.shape[1], 'height': x.shape[0],
               'step': STEP, 'reference': reference, 'coverage': round(coverage, 5),
-              'decimetres': b64encode(encoded.tobytes()).decode()}
-    (ROOT / 'dist/hamilton-elevation.json').write_text(json.dumps(result, separators=(',', ':')) + '\n')
+              'decimetreSteps': b64encode(deltas.tobytes()).decode()}
+    write_json(ROOT / 'dist/hamilton-elevation.json.gz', result)
     print(f'Elevation range: {samples.min():.1f}–{samples.max():.1f} m; measured coverage {coverage:.2%}; {count} water surfaces')
 
 

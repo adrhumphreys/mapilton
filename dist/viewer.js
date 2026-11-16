@@ -1,5 +1,8 @@
-import { createElevation } from './elevation.js?extent=3';
-import { width, height, mapScale, project, places, paintCity, paintMovement, paintBirds } from './city.js?activity=1';
+import { createElevation } from './elevation.js?data=2';
+import { width, height, mapScale, project, places, paintCity, paintMovement, paintOverlay, paintAir, paintSky, paintClouds,
+  advanceTransport } from './city.js?life=3';
+import { describeVehicle, listVehicles } from './transit.js?life=3';
+import { now, conditions, watchWeather, describe, paintFog, paintRain } from './sky.js?life=3';
 
 const canvas = document.querySelector('#map');
 const context = canvas.getContext('2d');
@@ -13,29 +16,53 @@ scene.width = width;
 scene.height = height;
 const status = document.querySelector('#loading');
 async function loadJson(file) {
-  const response = await fetch(`${file}?extent=3`);
+  const response = await fetch(`${file}.gz?data=2`);
   if (!response.ok) throw new Error(`${file} returned HTTP ${response.status}`);
-  return response.json();
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const gzipped = bytes[0] === 0x1f && bytes[1] === 0x8b;
+  const body = gzipped ? new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip')) : new Blob([bytes]).stream();
+  return new Response(body).json();
 }
 
 let layers, elevation;
 try {
   const ground = new Image();
   ground.src = './hamilton-ground.webp?extent=3';
-  const [map, lidar, aerial, terrain] = await Promise.all([
+  const [map, lidar, aerial, terrain, transit] = await Promise.all([
     loadJson('hamilton.json'),
     loadJson('hamilton-lidar.json'),
     loadJson('hamilton-aerial.json'),
     loadJson('hamilton-elevation.json'),
+    loadJson('hamilton-transit.json').catch(error => {
+      console.warn('Bus and train timetables are unavailable.', error);
+      return null;
+    }),
     ground.decode(),
   ]);
   elevation = createElevation(terrain, mapScale);
-  layers = paintCity(scene.getContext('2d'), map, lidar, { ground, roofs: aerial.roofs }, elevation);
+  layers = paintCity(scene.getContext('2d'), map, lidar, { ground, roofs: aerial.roofs }, elevation, transit);
   status.hidden = true;
 } catch (error) {
   status.textContent = 'The map could not load. Reload to try again.';
   throw error;
 }
+const skyLabel = document.querySelector('#sky');
+const weather = watchWeather(() => {
+  refreshSky();
+  requestDraw();
+});
+let skyCheckedAt = -Infinity, cloudDrift = [0, 0], previousFrame;
+function refreshSky() {
+  const ms = now();
+  layers.sky = conditions(ms, weather);
+  layers.clock = ms / 1000;
+  layers.traffic.activity = layers.sky.traffic;
+  const label = describe(ms, weather);
+  if (skyLabel.textContent !== label) skyLabel.textContent = label;
+  skyCheckedAt = performance.now();
+}
+refreshSky();
+setInterval(() => { if (motion.matches) requestDraw(); }, 60000);
 const composite = document.createElement('canvas');
 composite.width = width;
 composite.height = height;
@@ -51,7 +78,7 @@ const miniInsetY = (mini.height - height * miniScale) / 2;
 composed.drawImage(scene, 0, 0);
 paintMovement(composed, layers, 0, mapBounds);
 composed.drawImage(layers.foreground, 0, 0);
-paintBirds(composed, layers.birds, 0, mapBounds);
+paintOverlay(composed, layers, 0, mapBounds, 0);
 miniPaint.fillStyle = '#1c3331';
 miniPaint.fillRect(0, 0, mini.width, mini.height);
 miniPaint.drawImage(composite, miniInsetX, miniInsetY, width * miniScale, height * miniScale);
@@ -146,6 +173,14 @@ function requestDraw() {
 
 function draw(time) {
   frame = undefined;
+  const animate = !motion.matches;
+  if (performance.now() - skyCheckedAt > 5000) refreshSky();
+  layers.clock = now() / 1000;
+  const sky = layers.sky;
+  const elapsed = previousFrame === undefined ? 0 : Math.min(0.2, (time - previousFrame) / 1000);
+  previousFrame = time;
+  advanceTransport(layers, time / 1000, !(animate && scale > 0.55));
+  const followed = follow(elapsed);
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.fillStyle = '#223934';
   context.fillRect(0, 0, viewportWidth, viewportHeight);
@@ -160,19 +195,30 @@ function draw(time) {
   const bottom = Math.min(height, Math.ceil(y + halfH));
   const bounds = { left, top, right, bottom };
   const region = [left, top, right - left, bottom - top];
-  const animate = !motion.matches && scale > 0.55;
-  if (animate) {
+  cloudDrift = cloudDrift.map((value, axis) => value + sky.wind[axis] * elapsed);
+  if (animate && scale > 0.55) {
     context.drawImage(scene, ...region, ...region);
     paintMovement(context, layers, time / 1000, bounds);
     context.drawImage(layers.foreground, ...region, ...region);
-    paintBirds(context, layers.birds, time / 1000, bounds);
+    paintOverlay(context, layers, time / 1000, bounds, scale);
   } else {
     context.drawImage(composite, ...region, ...region);
   }
+  paintAir(context, layers, bounds);
+  paintSky(context, layers, time / 1000, bounds, scale);
+  if (animate) paintClouds(context, layers.clouds, cloudDrift, bounds, sky.shadows);
+  if (followed) paintTrackingMarker(followed, time / 1000);
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  paintFog(context, sky, layers.clock, viewportWidth, viewportHeight);
+  if (animate) paintRain(context, sky, time / 1000, viewportWidth, viewportHeight, scale);
 
   layoutLabels();
 
   miniContext.drawImage(miniBase, 0, 0);
+  miniContext.globalCompositeOperation = 'multiply';
+  miniContext.fillStyle = `rgb(${sky.tint.map(Math.round).join(', ')})`;
+  miniContext.fillRect(0, 0, mini.width, mini.height);
+  miniContext.globalCompositeOperation = 'source-over';
   miniContext.strokeStyle = '#fff2bf';
   miniContext.lineWidth = 1.5;
   miniContext.strokeRect(miniInsetX + left * miniScale + 1, miniInsetY + top * miniScale + 1,
@@ -209,6 +255,7 @@ function zoom(factor, px = viewportWidth / 2, py = viewportHeight / 2) {
 }
 
 function choose(index) {
+  stopTracking();
   selection = index;
   select.value = index === -1 ? '' : String(index);
   detail.hidden = index === -1;
@@ -264,6 +311,7 @@ canvas.addEventListener('pointermove', event => {
         (current[1] + other[1]) / 2 - bounds.top);
     }
   } else {
+    if (tracked !== null && Math.hypot(current[0] - previous[0], current[1] - previous[1]) > 0) stopTracking();
     x -= (current[0] - previous[0]) / scale;
     y -= (current[1] - previous[1]) / scale;
   }
@@ -279,10 +327,11 @@ canvas.addEventListener('keydown', event => {
   switch (event.key) {
     case '+': case '=': zoom(1.35); break;
     case '-': zoom(1 / 1.35); break;
-    case 'ArrowLeft': x -= step; break;
-    case 'ArrowRight': x += step; break;
-    case 'ArrowUp': y -= step; break;
-    case 'ArrowDown': y += step; break;
+    case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown':
+      stopTracking();
+      x += event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
+      y += event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+      break;
     case 'Home': choose(-1); break;
     default: return;
   }
@@ -294,3 +343,184 @@ canvas.addEventListener('keydown', event => {
 motion.addEventListener('change', requestDraw);
 new ResizeObserver(resize).observe(canvas);
 resize();
+
+const busButton = document.querySelector('#find-bus');
+const busDialog = document.querySelector('#buses');
+const busSearch = document.querySelector('#bus-search');
+const busList = document.querySelector('#bus-list');
+const busEmpty = document.querySelector('#bus-empty');
+let tracked = null, trackedLabel = null, trackedLine = '';
+
+const clockTime = seconds => {
+  const day = ((Math.floor(seconds / 60) % 1440) + 1440) % 1440;
+  const hour = Math.floor(day / 60), minute = day % 60;
+  return `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'am' : 'pm'}`;
+};
+
+function badge({ name, colour, text }) {
+  const element = document.createElement('span');
+  element.className = 'route-badge';
+  element.textContent = name;
+  element.style.background = colour;
+  element.style.color = text;
+  if (colour.toLowerCase() === '#000000') element.style.boxShadow = 'inset 0 0 0 1px #e6dfc96e';
+  return element;
+}
+
+const nextLine = info => info.stopped ? `At ${info.next}` : `Next stop ${info.next} · due ${clockTime(info.nextAt)}`;
+
+function renderBuses() {
+  const query = busSearch.value.trim().toLowerCase();
+  const inMap = (px, py) => px >= 0 && px <= width && py >= 0 && py <= height;
+  const vehicles = listVehicles(layers.transit, inMap)
+    .filter(info => !query || [info.name, info.title, info.headsign, info.next].some(value => value.toLowerCase().includes(query)))
+    .sort((a, b) => Number(a.train) - Number(b.train) || a.name.localeCompare(b.name, 'en', { numeric: true })
+      || a.headsign.localeCompare(b.headsign));
+  busList.replaceChildren(...vehicles.map(info => {
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    const what = document.createElement('span');
+    what.className = 'bus-what';
+    const title = document.createElement('strong');
+    title.textContent = info.train ? info.headsign : `${info.title} · ${info.headsign}`;
+    const detail = document.createElement('span');
+    detail.textContent = nextLine(info);
+    what.append(title, detail);
+    button.append(badge(info), what);
+    button.addEventListener('click', () => {
+      busDialog.close();
+      track(info.key);
+    });
+    item.append(button);
+    return item;
+  }));
+  busEmpty.hidden = vehicles.length > 0;
+  busEmpty.textContent = query ? 'No buses or trains on the map match that search.' : 'No buses or trains are on the map right now.';
+}
+
+function track(key) {
+  const info = describeVehicle(layers.transit, key);
+  if (!info) return;
+  stopTracking();
+  selection = -1;
+  select.value = '';
+  tracked = key;
+  [x, y] = [info.x, info.y];
+  scale = clampScale(Math.max(scale, 2.4));
+  const title = document.createElement('h2');
+  title.className = 'tracking-title';
+  const name = document.createElement('span');
+  name.textContent = info.train ? 'Train' : info.title;
+  title.append(badge(info), name);
+  const heading = document.createElement('p');
+  heading.textContent = info.headsign;
+  trackedLabel = document.createElement('p');
+  trackedLabel.className = 'tracking-next';
+  trackedLabel.setAttribute('aria-live', 'polite');
+  trackedLine = nextLine(info);
+  trackedLabel.textContent = trackedLine;
+  const stop = document.createElement('button');
+  stop.type = 'button';
+  stop.className = 'stop-tracking';
+  stop.textContent = 'Stop tracking';
+  stop.addEventListener('click', () => {
+    stopTracking();
+    canvas.focus({ preventScroll: true });
+  });
+  detail.replaceChildren(title, heading, trackedLabel, stop);
+  detail.hidden = false;
+  busButton.setAttribute('aria-pressed', 'true');
+  constrain();
+  requestDraw();
+}
+
+function stopTracking(message) {
+  if (tracked === null) return;
+  tracked = null;
+  trackedLabel = null;
+  busButton.setAttribute('aria-pressed', 'false');
+  if (message) {
+    const note = document.createElement('p');
+    note.textContent = message;
+    detail.replaceChildren(note);
+  } else detail.hidden = true;
+}
+
+function follow(elapsed) {
+  if (tracked === null) return null;
+  const info = describeVehicle(layers.transit, tracked);
+  if (!info) {
+    stopTracking('That trip has finished.');
+    return null;
+  }
+  const pull = elapsed ? 1 - Math.exp(-elapsed * 5) : 1;
+  x += (info.x - x) * pull;
+  y += (info.y - y) * pull;
+  constrain();
+  const line = nextLine(info);
+  if (trackedLabel && line !== trackedLine) {
+    trackedLine = line;
+    trackedLabel.textContent = line;
+  }
+  return info;
+}
+
+function paintTrackingMarker(info, seconds) {
+  const pulse = (Math.sin(seconds * 4) + 1) / 2;
+  context.save();
+  context.strokeStyle = '#f6df9e';
+  context.lineWidth = 2 / scale;
+  context.globalAlpha = 0.55 + pulse * 0.45;
+  context.beginPath();
+  context.arc(info.x, info.y - 1, (9 + pulse * 3) / scale, 0, Math.PI * 2);
+  context.stroke();
+  context.globalAlpha = 1;
+  context.fillStyle = '#f6df9e';
+  const tip = info.y - 1 - (14 + pulse * 3) / scale;
+  context.beginPath();
+  context.moveTo(info.x, tip);
+  context.lineTo(info.x - 5 / scale, tip - 7 / scale);
+  context.lineTo(info.x + 5 / scale, tip - 7 / scale);
+  context.closePath();
+  context.fill();
+  context.restore();
+}
+
+if (layers.transit) {
+  busButton.hidden = false;
+  busButton.setAttribute('aria-pressed', 'false');
+  busButton.addEventListener('click', () => {
+    busSearch.value = '';
+    renderBuses();
+    busDialog.showModal();
+    busSearch.focus();
+  });
+  busSearch.addEventListener('input', renderBuses);
+  document.querySelector('#close-buses').addEventListener('click', () => busDialog.close());
+  busDialog.addEventListener('click', event => {
+    if (event.target === busDialog) busDialog.close();
+  });
+}
+
+const atlas = document.querySelector('#atlas');
+const zenButton = document.querySelector('#zen');
+
+function setZen(on) {
+  atlas.classList.toggle('zen', on);
+  zenButton.setAttribute('aria-pressed', String(on));
+  zenButton.setAttribute('aria-label', on ? 'Leave zen mode' : 'Zen mode');
+  zenButton.title = on ? 'Leave zen mode (Esc)' : 'Zen mode (Z)';
+  previousLabelView = '';
+  requestDraw();
+}
+
+zenButton.addEventListener('click', () => setZen(!atlas.classList.contains('zen')));
+document.addEventListener('keydown', event => {
+  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (event.target.closest?.('input, select, textarea, dialog')) return;
+  if (event.key === 'z' || event.key === 'Z') setZen(!atlas.classList.contains('zen'));
+  else if (event.key === 'Escape' && atlas.classList.contains('zen')) setZen(false);
+  else return;
+  event.preventDefault();
+});

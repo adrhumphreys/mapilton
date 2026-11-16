@@ -1,8 +1,14 @@
 // An elevation grid in the same screen coordinates as the flat ground.
 export function createElevation(grid, mapScale = 1) {
   const { left, top, width, height, step } = grid;
-  const raw = Uint8Array.from(atob(grid.decimetres), character => character.charCodeAt(0));
-  const values = new DataView(raw.buffer);
+  const raw = Uint8Array.from(atob(grid.decimetreSteps), character => character.charCodeAt(0));
+  const steps = new Int16Array(raw.buffer);
+  const levels = new Int16Array(steps.length);
+  for (let i = 0; i < steps.length; i++) {
+    const previous = i % width ? levels[i - 1] : i >= width ? levels[i - width] : 0;
+    levels[i] = previous + steps[i];
+  }
+  const values = new DataView(levels.buffer);
   const right = left + (width - 1) * step;
   const bottom = top + (height - 1) * step;
   const sample = (x, y) => values.getInt16((y * width + x) * 2, true) * 0.073 * mapScale;
