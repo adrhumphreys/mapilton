@@ -10,7 +10,7 @@ From the repository root:
 python3 -m http.server 8000 --bind 127.0.0.1 --directory dist
 ```
 
-Open [localhost:8000](http://127.0.0.1:8000). Drag to pan, scroll or pinch to zoom, and choose a landmark to jump there. Zooming out stops when the map fills the window. With the map focused, use the arrow keys, plus, minus, and Home.
+Open [localhost:8000](http://127.0.0.1:8000). Drag to pan, scroll or pinch to zoom, and choose a landmark to jump there. Zooming out stops when the map fills the window. With the map focused, use the arrow keys, plus, minus, and Home. To see only the map, choose the zen mode button below the zoom controls or press Z. Press Esc or Z to bring the labels and controls back.
 
 ## Map source and rendering
 
@@ -24,7 +24,7 @@ The bundled LiDAR derivatives use the [LINZ Hamilton 2023 DEM](https://nz-elevat
 
 To rebuild the data file, run `python3 scripts/import-osm.py`. The importer fetches public OSM XML extracts and keeps only the geometry and tags used by the renderer. To reuse saved extracts, pass their paths as arguments.
 
-To regenerate the LiDAR derivatives, install `numpy`, `pyproj`, `rasterio`, and `scipy` in a Python virtual environment, then run `python scripts/import-lidar.py` after importing OpenStreetMap. The script reads the public LINZ GeoTIFFs and writes the bundled `dist/hamilton-lidar.json`.
+To regenerate the LiDAR derivatives, install `numpy`, `pyproj`, `rasterio`, and `scipy` in a Python virtual environment, then run `python scripts/import-lidar.py` after importing OpenStreetMap. The script reads the public LINZ GeoTIFFs and writes the bundled `dist/hamilton-lidar.json.gz`. The import scripts write their data as gzip-compressed JSON, and the viewer decompresses it in the browser, so the map downloads about 18 MB instead of 43 MB on any static host.
 
 ## Aerial detail
 
@@ -51,3 +51,41 @@ The Base close-up models [Te Awa’s ribbed ETFE roof](https://www.rlb.com/ocean
 The LINZ orthophoto also guides the parking rows and paths at the University of Waikato and Claudelands Bridge, and the paving and selected surface parking around Garden Place. Bay spacing and parked vehicles are illustrated.
 
 Illustrated visitors gather on paved areas, at selected bus shelters, and beside campus paths. Walkers and cyclists follow mapped routes. Reduced-motion mode keeps a still view of the same scene.
+
+Traffic queues behind slower vehicles, stops at illustrated signal cycles on mapped traffic signals, and gives way to pedestrians on mapped crossings. Buses pause at mapped stops on their side of the road, where waiting passengers board. Signal timings, bus services, and crossing pedestrians are illustrated.
+
+The viewer derives a Waikato River centreline from the mapped water when it loads. Surface flecks drift downstream along it, and illustrated rowing eights, kayaks, and launches travel between points on the river. Ducks and black swans paddle on the lakes and ponds. Canopy tops lean in passing gusts at close zoom, and illustrated cloud shadows drift across the whole map.
+
+## Buses and trains
+
+Buses and Te Huia trains follow the published [Busit timetable](https://www.transit.land/feeds/f-busit~nz) from Waikato Regional Council. Each bus runs its real route at its scheduled time, in its route colour. Buses slow for traffic and signals on the mapped roads and pick up waiting passengers at stops. Te Huia runs its scheduled services between Frankton, Rotokauri, and Auckland. Freight trains are illustrated, because freight has no public timetable. They run the North Island Main Trunk and the East Coast Main Trunk, disappearing into the central city tunnel.
+
+To follow one, choose **Buses** beside Explore, then pick a bus or train from the list. The map tracks it and shows its next stop until you drag the map or choose a landmark.
+
+To refresh the timetable, run `python3 scripts/import-transit.py`. It downloads the Busit GTFS feed, keeps the routes and trips that cross the map, and traces the freight lines along the mapped railway. To reuse a saved feed, pass its path as an argument.
+
+## Time of day and weather
+
+The map follows the current time in Hamilton. `dist/sky.js` calculates the sun's position for the city, so light warms through sunrise and sunset, and the city darkens at night. At night, façade windows light up, illustrated street lights line the mapped roads, and vehicles show headlights. Fewer people and vehicles appear late at night, and traffic peaks at commuting times on weekdays.
+
+Current conditions come from [Open-Meteo](https://open-meteo.com/) (CC BY 4.0) and refresh every 15 minutes. Cloud cover sets the strength of the cloud shadows, and wind sets their direction and speed. Rain brings falling streaks, splashes, umbrellas, and fewer cyclists, and fog adds drifting haze. If the weather service is unavailable, the map shows fair weather.
+
+In calm, dry daylight, illustrated hot air balloons launch together from Innes Common beside Lake Rotoroa and drift downwind. People sit on mapped benches and gather at mapped picnic tables. Some walkers have dogs, and joggers use the riverside paths.
+
+## Events
+
+`dist/events.js` stages illustrated events on a weekly schedule in Hamilton time:
+
+- **Te Rapa Racecourse**
+  - On Wednesday and Saturday afternoons, a crowd and marquees gather in front of the grandstand. Races run every 30 minutes from 12:15 pm. The horses parade past the stand, load into the starting gates and race at full gallop around the OpenStreetMap course while the crowd cheers.
+  - Barrier trials run in plain colours from 10 am to 3 pm on Monday, Tuesday and Thursday.
+  - Trackwork horses canter around the course early every morning except Sunday.
+- **Mapped sports fields** host football and rugby games:
+  - Saturday morning is busiest.
+  - Fewer games run on Sunday.
+  - After-school training runs on weekdays.
+- **Mapped courts** host tennis rallies in dry daylight.
+
+Heavy rain cancels field games, and any rain stops tennis.
+
+To preview another time or weather, add `?at=` with an ISO time and `&weather=` with `clear`, `cloudy`, `showers`, `rain`, `drizzle`, `fog`, or `storm`, for example `?at=2026-11-13T21:30:00%2B13:00&weather=rain`.

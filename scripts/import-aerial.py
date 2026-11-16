@@ -11,6 +11,7 @@ import rasterio
 from rasterio.features import rasterize
 from scipy.ndimage import distance_transform_edt, gaussian_filter
 
+from data_files import read_json, write_json
 from map_extent import WIDTH, HEIGHT, footprint_key, ground, screen
 
 ROOT = Path(__file__).resolve().parents[1] / 'dist'
@@ -60,7 +61,7 @@ def load_aerial():
 
 
 def footprints(photo, valid):
-    buildings = json.loads((ROOT / 'hamilton.json').read_text())['buildings']
+    buildings = read_json(ROOT / 'hamilton.json.gz')['buildings']
     geometry = []
     keys = []
     for _, _, _, ring, *courtyards in buildings:
@@ -102,8 +103,7 @@ def main():
     with rasterio.open(ROOT / 'hamilton-ground.webp', 'w', driver='WEBP', quality=90,
                        width=WIDTH, height=HEIGHT, count=4, dtype='uint8') as output:
         output.write(np.moveaxis(rgba, -1, 0))
-    (ROOT / 'hamilton-aerial.json').write_text(json.dumps(
-        {'roofs': roofs, 'coverage': round(float(valid.mean()), 4)}, separators=(',', ':')) + '\n')
+    write_json(ROOT / 'hamilton-aerial.json.gz', {'roofs': roofs, 'coverage': round(float(valid.mean()), 4)})
     print(f'Sampled {len(roofs)} roof colours')
 
 
